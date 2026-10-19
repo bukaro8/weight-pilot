@@ -1,0 +1,108 @@
+name: weightpilot
+
+services:
+  app:
+    build:
+      context: .
+      target: runner
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in .env}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?Set BETTER_AUTH_URL in .env}
+      BETTER_AUTH_TRUSTED_ORIGINS: ${BETTER_AUTH_TRUSTED_ORIGINS:-}
+      AUTH_TRUST_PROXY_HEADERS: ${AUTH_TRUST_PROXY_HEADERS:-false}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      NEXT_TELEMETRY_DISABLED: ${NEXT_TELEMETRY_DISABLED:-1}
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "3000"
+    ports:
+      - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_PORT:-3000}:3000"
+    networks:
+      - web
+      - database
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/en"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-weightpilot}
+      POSTGRES_USER: ${POSTGRES_USER:-weightpilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - database
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  migrate:
+    profiles: ["tools"]
+    build:
+      context: .
+      target: migrations
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - database
+    restart: "no"
+    init: true
+    security_opt:
+      - no-new-privileges:true
+
+  bootstrap-admin:
+    profiles: ["tools"]
+    build:
+      context: .
+      target: migrations
+    command: ["npm", "run", "auth:bootstrap-admin"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_NAME: ${ADMIN_NAME:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_PREFERRED_LANGUAGE: ${ADMIN_PREFERRED_LANGUAGE:-en}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - database
+    restart: "no"
+    init: true
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  postgres_data:
+    name: weightpilot_postgres_data
+
+networks:
+  web:
+    name: weightpilot_web
+  database:
+    name: weightpilot_database
+    internal: true
