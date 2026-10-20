@@ -1,6 +1,6 @@
 # WeightPilot
 
-WeightPilot is a bilingual Next.js application for a private, personalised weight-management information and guidance platform. It is not a clinic, healthcare provider or medical service. Phase 3B adds invitation-only registration, referral tracking and secure account reactivation; assessments and other business workflows remain placeholders.
+WeightPilot is a bilingual Next.js application for a private, personalised weight-management information and guidance platform. It is not a clinic, healthcare provider or medical service. Phase 4B.2 includes invitation-only accounts, a short personalised-assessment questionnaire, administrator-managed illustrative reference pricing, and a preliminary educational comparison of semaglutide and tirzepatide. Guidance reports and other business workflows remain placeholders.
 
 ## Local development
 
@@ -10,6 +10,7 @@ Requirements: Node.js 22+, npm, and PostgreSQL when working on database-backed f
 cp .env.example .env.local
 npm ci
 npm run db:migrate
+npm run db:seed:pricing
 npm run dev
 ```
 
@@ -46,7 +47,13 @@ The production image uses Next.js standalone output and runs as an unprivileged 
    docker compose run --rm migrate
    ```
 
-5. Start the application:
+5. Seed any missing reference prices. The command is idempotent and preserves administrator edits:
+
+   ```bash
+   docker compose run --rm seed-pricing
+   ```
+
+6. Start the application:
 
    ```bash
    docker compose up -d app
@@ -94,6 +101,30 @@ docker compose run --rm migrate
 
 The invitation copy stored for its creator is encrypted with `BETTER_AUTH_SECRET`; keep that secret stable and backed up securely. Rotating it invalidates display/copy access to previously created active codes, although their one-way hashes and redemption records remain intact.
 
+### Personalised assessment questionnaire
+
+Active, verified members use `/en/consultations` or `/es/consultations` to complete the five-step questionnaire. One unfinished draft per member is saved in PostgreSQL and resumes automatically. Completed questionnaires become read-only and unlock a bilingual preliminary comparison at `/en/consultations/results` or `/es/consultations/results`.
+
+Completing a questionnaire does not automatically share it into the administrator review queue. A member must explicitly select **Request personalised review** on the results page. The resulting single review request is visible to the administrator at `/en/admin/questionnaires` or `/es/admin/questionnaires`, where its status can be managed. Duplicate review requests are prevented by the database.
+
+Questionnaire responses are private health information. Keep PostgreSQL on the internal Docker network, restrict database backups, and do not forward request bodies to proxy or application logs. BMI and target-loss calculations are informational only and do not provide diagnosis, prescribing or treatment recommendations.
+
+The comparison is a deterministic server-side educational rules engine. It stores language-neutral outcome keys, highlights relevant cautions without inferring safety from missing information, and never ranks a medicine or chooses a dose. Research links and average results describe specific study populations rather than predicted individual outcomes.
+
+### Reference pricing
+
+The sole administrator manages illustrative monthly treatment and delivery prices at `/en/admin/pricing` or `/es/admin/pricing`. Amounts are stored as integer pence and updates are authorised and validated server-side. The reference calculator supports 6, 12 and 16 months, assumes one purchase and one delivery per month, and does not use questionnaire answers or provide treatment or dose recommendations.
+
+Run the seed after migrations on each environment:
+
+```bash
+npm run db:seed:pricing
+# or with Docker
+docker compose run --rm seed-pricing
+```
+
+The seed inserts missing defaults only, so it is safe to rerun and does not overwrite administrator changes. These values are illustrative WeightPilot reference prices, not verified commercial pharmacy prices, checkout totals or offers to sell medicines. Commercial pricing must remain a separate future data source.
+
 ### Cloudflare Tunnel or an existing reverse proxy
 
 No proxy is bundled. For a host-installed Cloudflare Tunnel or reverse proxy, send traffic to `http://127.0.0.1:3000`. Keep `APP_BIND_ADDRESS=127.0.0.1` so the application is not exposed directly on every host interface.
@@ -102,9 +133,13 @@ A containerised tunnel or proxy can instead join the existing `weightpilot_web` 
 
 Set `AUTH_TRUST_PROXY_HEADERS=true` only when clients cannot reach the application origin directly and the trusted proxy overwrites `CF-Connecting-IP` or `X-Real-IP`. Otherwise leave it `false`. Add any legitimate additional browser origins to the comma-separated `BETTER_AUTH_TRUSTED_ORIGINS`; do not use broad wildcards.
 
+For direct local Docker access, use an HTTP `BETTER_AUTH_URL` such as `http://localhost:3000`. Session-cookie security follows that canonical origin: local HTTP uses an HTTP-only SameSite cookie, while every HTTPS deployment uses a Secure HTTP-only cookie. This keeps local sign-in functional without weakening tunnel or reverse-proxy deployments.
+
 ### Authentication email delivery
 
-Email verification and password reset use Resend. Set `RESEND_API_KEY` and a verified `EMAIL_FROM` sender in the runtime environment. Builds and containers can start without these values, but authentication emails will not be delivered until they are configured. Email copy follows each account's `preferred_language` (`en` or `es`). Password-recovery responses intentionally do not reveal whether an email address exists.
+Email verification, password reset and administrator-reviewed guidance reports use Resend. Set `RESEND_API_KEY` and a verified `EMAIL_FROM` sender in the runtime environment. Builds and containers can start without these values, but emails will not be delivered until they are configured. Email copy follows the selected or preferred language (`en` or `es`). Password-recovery responses intentionally do not reveal whether an email address exists.
+
+For reliable report delivery status, create a Resend webhook pointing to `https://your-public-origin.example/api/webhooks/resend`, subscribe to delivered, failed, bounced, suppressed and complained email events, and set its signing secret as `RESEND_WEBHOOK_SECRET`. WeightPilot records API acceptance separately and changes a review to `COMPLETED` only after a valid signed `email.delivered` event. Ensure the tunnel or reverse proxy forwards this HTTPS path directly to the application.
 
 Sessions are stored in PostgreSQL for seven days, refreshed daily, revoked after a password reset, and issued in secure, HTTP-only cookies in production. Private routes re-check the user record server-side, so inactive or unverified accounts are denied even if an older session cookie still exists.
 
@@ -116,6 +151,7 @@ Create a database backup first, then fetch the new source and run:
 docker compose build
 docker compose up -d db
 docker compose run --rm migrate
+docker compose run --rm seed-pricing
 docker compose up -d app
 docker image prune -f
 ```

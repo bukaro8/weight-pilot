@@ -12,10 +12,6 @@ import {signInSchema} from "@/features/auth/validation";
 import {Link, useRouter} from "@/i18n/navigation";
 import type {Locale} from "@/i18n/routing";
 
-function safeNextPath(value: string | null) {
-  return value?.startsWith("/") && !value.startsWith("//") ? value : "/consultations";
-}
-
 export function SignInForm({nextPath}: {nextPath?: string}) {
   const t = useTranslations("auth");
   const locale = useLocale() as Locale;
@@ -34,22 +30,32 @@ export function SignInForm({nextPath}: {nextPath?: string}) {
     }
 
     setPending(true);
-    await authClient.signIn.email(
-      {...parsed.data, rememberMe: true},
-      {
-        onSuccess: () => router.replace(safeNextPath(nextPath ?? null), {locale}),
-        onError: (context) => {
-          if (context.error.code === "EMAIL_NOT_VERIFIED") {
-            router.push("/verify-email/pending", {locale});
-          } else if (context.error.status === 429) {
-            setError(t("errorRateLimited"));
-          } else {
-            setError(t("errorInvalidCredentials"));
-          }
-          setPending(false);
-        },
-      },
-    );
+    try {
+      const result = await authClient.signIn.email(
+        {...parsed.data, rememberMe: true},
+        {timeout: 15_000},
+      );
+      if (result.error) {
+        if (result.error.code === "EMAIL_NOT_VERIFIED") {
+          router.push("/verify-email/pending", {locale});
+        } else if (result.error.status === 429) {
+          setError(t("errorRateLimited"));
+        } else if (result.error.status >= 500 || result.error.status === 0) {
+          setError(t("errorUnavailable"));
+        } else {
+          setError(t("errorInvalidCredentials"));
+        }
+        return;
+      }
+      const destinationResponse = await fetch(`/api/auth/destination${nextPath ? `?next=${encodeURIComponent(nextPath)}` : ""}`, {headers: {accept: "application/json"}});
+      const destinationBody = destinationResponse.ok ? await destinationResponse.json() as {destination?: string} : undefined;
+      router.replace(destinationBody?.destination ?? "/consultations", {locale});
+      router.refresh();
+    } catch {
+      setError(t("errorUnavailable"));
+    } finally {
+      setPending(false);
+    }
   }
 
   return (

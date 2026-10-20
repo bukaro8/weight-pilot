@@ -8,6 +8,7 @@ import {eq} from "drizzle-orm";
 import {getDb} from "@/db";
 import * as schema from "@/db/schema";
 import {sendPasswordResetEmail, sendVerificationEmail} from "@/lib/email";
+import {usesSecureAuthCookies} from "@/features/auth/config";
 
 const isProductionBuild = process.env.npm_lifecycle_event === "build";
 const baseURL = process.env.BETTER_AUTH_URL ?? (isProductionBuild ? "http://127.0.0.1:3000" : undefined);
@@ -37,7 +38,7 @@ export const auth = betterAuth({
     disableSignUp: true,
     requireEmailVerification: true,
     autoSignIn: false,
-    minPasswordLength: 12,
+    minPasswordLength: 9,
     maxPasswordLength: 128,
     resetPasswordTokenExpiresIn: 60 * 60,
     revokeSessionsOnPasswordReset: true,
@@ -82,9 +83,12 @@ export const auth = betterAuth({
   },
   advanced: {
     cookiePrefix: "weightpilot",
-    useSecureCookies: process.env.NODE_ENV === "production",
+    // Docker uses a production Node runtime even during local HTTP testing.
+    // Cookie transport security must follow the canonical public origin, not
+    // NODE_ENV, otherwise the browser rejects a successful local session.
+    useSecureCookies: usesSecureAuthCookies(baseURL),
     trustedProxyHeaders: trustProxyHeaders,
-    ipAddress: trustProxyHeaders ? {ipAddressHeaders: ["cf-connecting-ip", "x-real-ip"]} : undefined,
+    ipAddress: trustProxyHeaders ? {ipAddressHeaders: ["cf-connecting-ip", "x-real-ip", "x-forwarded-for"]} : undefined,
     database: {generateId: "uuid"},
   },
   databaseHooks: {

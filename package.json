@@ -8,8 +8,15 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test:reports": "node --no-warnings --experimental-strip-types --test tests/report-security.test.mjs",
+    "test:auth": "node --no-warnings --experimental-strip-types --test tests/auth-config.test.mjs",
+    "test:questionnaire": "node --no-warnings --experimental-strip-types --test tests/questionnaire-units.test.mjs",
+    "test:admin": "node --no-warnings --experimental-strip-types --test tests/admin-dashboard.test.mjs",
+    "test:admin-users": "node --no-warnings --experimental-strip-types --test tests/admin-user-management.test.mjs",
+    "test:assessment-results": "node --no-warnings --experimental-strip-types --test tests/assessment-results.test.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:seed:pricing": "node scripts/seed-pricing.mjs",
     "auth:bootstrap-admin": "node scripts/bootstrap-admin.mjs"
   },
   "dependencies": {

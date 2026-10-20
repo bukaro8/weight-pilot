@@ -12,7 +12,7 @@ const preferredLanguage = process.env.ADMIN_PREFERRED_LANGUAGE === "es" ? "es" :
 if (!databaseUrl) throw new Error("DATABASE_URL is required");
 if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("ADMIN_EMAIL must be a valid email address");
 if (!name || name.length < 2 || name.length > 120) throw new Error("ADMIN_NAME must contain 2–120 characters");
-if (!password || password.length < 12 || password.length > 128) throw new Error("ADMIN_PASSWORD must contain 12–128 characters");
+if (!password || password.length < 9 || password.length > 128) throw new Error("ADMIN_PASSWORD must contain 9–128 characters");
 
 const sql = postgres(databaseUrl, {prepare: false, max: 1});
 

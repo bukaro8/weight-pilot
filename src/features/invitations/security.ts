@@ -5,6 +5,7 @@ import {createHash} from "node:crypto";
 import {sql} from "drizzle-orm";
 
 import {getDb} from "@/db";
+export {assertTrustedMutationOrigin} from "@/lib/request-security";
 
 export class InvitationRateLimitError extends Error {
   constructor() {
@@ -14,19 +15,6 @@ export class InvitationRateLimitError extends Error {
 
 export function invitationCodeHash(code: string) {
   return createHash("sha256").update(code.trim(), "utf8").digest("hex");
-}
-
-export function assertTrustedMutationOrigin(request: Request) {
-  const origin = request.headers.get("origin");
-  const allowed = [
-    new URL(request.url).origin,
-    process.env.BETTER_AUTH_URL,
-    ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? []),
-  ].filter((value): value is string => Boolean(value)).map((value) => value.replace(/\/$/, ""));
-
-  if (!origin || !allowed.includes(origin.replace(/\/$/, ""))) {
-    throw new Error("UNTRUSTED_ORIGIN");
-  }
 }
 
 function requestFingerprint(request: Request) {

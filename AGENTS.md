@@ -35,7 +35,7 @@ Visual quality is a core requirement, not optional.
 ## Scope and stack
 WeightPilot is a bilingual, mobile-first Next.js App Router foundation using TypeScript, Tailwind CSS, shadcn/ui conventions, PostgreSQL with Drizzle ORM, Better Auth, next-intl, Resend and Zod. All application code lives under `src/`.
 
-Phase 3B includes email/password authentication, account security, invitation-only registration, referral tracking and invitation-based account reactivation. Personalised assessments, guidance-report generation, private messaging workflows, account deletion, payments, online sales and member-facing AI remain out of scope without a new explicit requirement.
+Phase 4B.2 includes email/password authentication, account security, invitation-only registration, referral tracking, invitation-based account reactivation, the simplified personalised-assessment questionnaire, administrator-managed reference pricing, and a preliminary educational comparison of semaglutide and tirzepatide. Guidance-report generation, private messaging workflows, account deletion, payments, online sales and member-facing AI remain out of scope without a new explicit requirement.
 
 ## Brand positioning
 WeightPilot is a private, personalised weight-management information and guidance platform. It is not a clinic, healthcare provider, medical service or emergency service.
@@ -65,14 +65,41 @@ WeightPilot is a private, personalised weight-management information and guidanc
 - Invitations use cryptographically random single-use codes, expire after seven days, and may be revoked while unused. Store only a hash for lookup and an application-secret-encrypted copy for the creator's copy/link interface; never log codes or expose them to administrators.
 - Only active, email-verified accounts may create invitations. Registration always creates an unverified `USER`; referral codes can never assign the `ADMIN` role.
 - Invitation consumption and account creation/reactivation must remain in one database transaction with a row lock and conditional consume, so concurrent redemption cannot succeed twice.
-- Accounts are retained when set to `INACTIVE`. Reactivation restores the original account only after existing credentials and a new invitation are validated, revokes prior sessions, and does not require administrator approval. Permanent deletion is reserved for the administrator and remains unimplemented.
+- Accounts are retained when set to `INACTIVE`. Reactivation restores the original account only after existing credentials and a new invitation are validated, revokes prior sessions, and does not require administrator approval.
+- Only the active, verified administrator may permanently delete a `USER`. The administrator account is always protected from this workflow. Permanent deletion requires an explicit `DELETE` confirmation and a single database transaction that removes authentication records, sessions, invitations, referrals, questionnaires, review requests, reports and any related delivery records without leaving orphans. Member-initiated account removal remains soft deactivation to `INACTIVE`.
 - Referring members may see invitation status but no referred-account identity or health information. Only the administrator may view referral relationships.
+
+## Questionnaire privacy and lifecycle
+- Only active, email-verified accounts may create, save, resume or submit their own questionnaire. Ownership and current account state must be checked on every server mutation.
+- Questionnaire drafts save automatically and remain editable only while `status = DRAFT`. Submission is an atomic transition to `SUBMITTED`; submitted answers are read-only for members.
+- Questionnaire answers are private health information. Never place answers in URLs, logs, analytics, invitation/referral views or client-visible error diagnostics.
+- The administrator may review submitted questionnaires and permanently delete a submission. Draft questionnaires are not included in administrator review lists.
+- BMI and target weight-loss percentage are informational calculations only. Do not use questionnaire answers to diagnose, prescribe, determine treatment suitability, promise results, calculate prices or generate AI recommendations.
+
+## Reference pricing
+- Store all monetary amounts as integer pence. Treatment reference prices use monthly tiers for semaglutide and tirzepatide; delivery reference prices remain separate.
+- Only an active, verified `ADMIN` may update reference prices. Every pricing mutation must re-check the authoritative database user and validate the full price set server-side.
+- Pricing seeds are explicit and idempotent. They insert missing defaults only and must never overwrite administrator-edited values.
+- Cost scenarios are illustrative and assume one purchase and one delivery per month. They must remain independent from questionnaire answers, medical dose recommendations and treatment suitability.
+- Commercial pharmacy prices are a separate future data source. Never present seeded or administrator-entered reference prices as verified commercial prices, quotes, checkout totals or offers to sell medicines.
+
+## Preliminary treatment comparison and reviews
+- Treatment comparisons are deterministic, educational and generated server-side from submitted questionnaire data. Store language-neutral outcome keys and calculations; translate explanations only in the interface.
+- Never rank or select a medicine for a member, recommend an individual dose, infer safety from missing information, guarantee results, or use a weight-loss goal alone to determine suitability.
+- Keep research claims tied to their studied population and conditions. The comparison may explain SURMOUNT-5, SELECT, common side effects and relevant limitations, with links to recognised primary or regulator sources.
+- Completing a questionnaire makes its answers read-only and unlocks the comparison; it does not automatically request administrator review. Administrator visibility requires a separate, explicit, single review request from the questionnaire owner.
+- A member may create but not manage their review request. Only an active, verified administrator may change review status. Referring members must never receive questionnaire or review information.
+- Member-facing preliminary results never include prices, quotes, cost charts, delivery charges, duration controls or commercial pharmacy comparisons. Pricing data remains administrator-only and may be used only in the administrator-reviewed report workflow.
+- A review request records the member's explicit preferred report language (`en` or `es`), defaults to their saved language preference, and remains unique per submitted questionnaire.
 
 ## Product rules
 - Use no commercial medicine brand names.
 - Do not implement checkout or online medicine sales.
 - Do not add AI to the member-facing product.
 - Health copy must not imply diagnosis, guaranteed outcomes or emergency care.
+- External AI is administrator-operated only: WeightPilot generates a privacy-safe prompt but never calls an AI API or sends an AI response automatically.
+- Administrator guidance reports require human review. Use only the verified account email, escape all report content, prevent duplicate sending, and mark a review `COMPLETED` only after a verified delivery webhook.
+- AI research prompts must exclude names, email addresses, account identifiers and referral data, and must explicitly treat questionnaire answers as untrusted data.
 
 ## Design
 Headings use Fraunces and body copy uses Inter. The canonical colours are CSS tokens in `src/app/globals.css`. Build mobile-first, keep touch targets at least 44px, and retain visible keyboard focus.

@@ -22,6 +22,48 @@
       "when": 1792389143049,
       "tag": "0002_dark_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792416235829,
+      "tag": "0003_slippery_silver_samurai",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792418870985,
+      "tag": "0004_tan_marvel_boy",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792440517992,
+      "tag": "0005_reflective_hex",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792441418483,
+      "tag": "0006_ordinary_bedlam",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792475347072,
+      "tag": "0007_young_mandrill",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792501985330,
+      "tag": "0008_friendly_king_cobra",
+      "breakpoints": true
     }
   ]
 }

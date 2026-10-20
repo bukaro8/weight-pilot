@@ -76,12 +76,12 @@ export function InvitationRegistrationForm({initialCode = ""}: {initialCode?: st
       </div>
       <div>
         <label htmlFor="password" className="mb-2 block text-sm font-semibold text-primary-dark">{t("passwordLabel")}</label>
-        <PasswordInput id="password" name="password" autoComplete="new-password" required disabled={pending} className={inputClassName}/>
+        <PasswordInput id="password" name="password" autoComplete="new-password" required minLength={9} disabled={pending} className={inputClassName}/>
         <p className="mt-2 text-xs leading-5 text-muted">{t("passwordHint")}</p>
       </div>
       <div>
         <label htmlFor="confirm-password" className="mb-2 block text-sm font-semibold text-primary-dark">{t("confirmPasswordLabel")}</label>
-        <PasswordInput id="confirm-password" name="confirmPassword" autoComplete="new-password" required disabled={pending} className={inputClassName}/>
+        <PasswordInput id="confirm-password" name="confirmPassword" autoComplete="new-password" required minLength={9} disabled={pending} className={inputClassName}/>
       </div>
       <Button type="submit" size="large" disabled={pending} className="w-full">
         {pending ? <LoaderCircle className="mr-2 animate-spin" aria-hidden="true" size={19}/> : <ArrowRight className="mr-2" aria-hidden="true" size={19}/>} {pending ? t("creatingAccount") : t("createAccount")}

@@ -44,12 +44,12 @@ export function ResetPasswordForm({token, invalidToken}: {token?: string; invali
       {error && <FormMessage>{error}</FormMessage>}
       <div>
         <label htmlFor="new-password" className="mb-2 block text-sm font-semibold text-primary-dark">{t("newPasswordLabel")}</label>
-        <PasswordInput id="new-password" name="password" autoComplete="new-password" required minLength={12} disabled={pending} className={inputClassName}/>
+        <PasswordInput id="new-password" name="password" autoComplete="new-password" required minLength={9} disabled={pending} className={inputClassName}/>
         <p className="mt-2 text-xs leading-5 text-muted">{t("passwordHint")}</p>
       </div>
       <div>
         <label htmlFor="confirm-password" className="mb-2 block text-sm font-semibold text-primary-dark">{t("confirmPasswordLabel")}</label>
-        <PasswordInput id="confirm-password" name="confirmPassword" autoComplete="new-password" required minLength={12} disabled={pending} className={inputClassName}/>
+        <PasswordInput id="confirm-password" name="confirmPassword" autoComplete="new-password" required minLength={9} disabled={pending} className={inputClassName}/>
       </div>
       <Button type="submit" size="large" disabled={pending} className="w-full">
         {pending ? <LoaderCircle aria-hidden="true" className="mr-2 animate-spin" size={19}/> : <Check aria-hidden="true" className="mr-2" size={19}/>}

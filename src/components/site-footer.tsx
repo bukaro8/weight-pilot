@@ -1,10 +1,13 @@
+"use client";
+
+import {useTranslations} from "next-intl";
+
 import {BrandLogo} from "@/components/brand-logo";
 import {Link} from "@/i18n/navigation";
-import {getTranslations} from "next-intl/server";
 
-export async function SiteFooter() {
-  const t = await getTranslations("footer");
-  const nav = await getTranslations("nav");
+export function SiteFooter() {
+  const t = useTranslations("footer");
+  const nav = useTranslations("nav");
   return (
     <footer className="border-t border-primary/10 bg-mist-blue/60">
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12 lg:px-10">

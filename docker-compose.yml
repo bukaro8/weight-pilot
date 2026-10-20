@@ -13,6 +13,7 @@ services:
       AUTH_TRUST_PROXY_HEADERS: ${AUTH_TRUST_PROXY_HEADERS:-false}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM:-}
+      RESEND_WEBHOOK_SECRET: ${RESEND_WEBHOOK_SECRET:-}
       NEXT_TELEMETRY_DISABLED: ${NEXT_TELEMETRY_DISABLED:-1}
     depends_on:
       db:
@@ -62,6 +63,24 @@ services:
     build:
       context: .
       target: migrations
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - database
+    restart: "no"
+    init: true
+    security_opt:
+      - no-new-privileges:true
+
+  seed-pricing:
+    profiles: ["tools"]
+    build:
+      context: .
+      target: migrations
+    command: ["npm", "run", "db:seed:pricing"]
     environment:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
     depends_on:

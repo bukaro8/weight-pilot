@@ -29,8 +29,8 @@ export async function requireMember(locale: Locale, nextPath: string) {
   return currentUser;
 }
 
-export async function requireAdmin(locale: Locale) {
-  const currentUser = await requireMember(locale, "/admin");
+export async function requireAdmin(locale: Locale, nextPath = "/admin") {
+  const currentUser = await requireMember(locale, nextPath);
   if (!canAccessAdmin(currentUser)) {
     return redirect({href: {pathname: "/auth-error", query: {reason: "forbidden"}}, locale});
   }
