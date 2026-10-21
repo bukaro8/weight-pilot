@@ -24,7 +24,7 @@
     "viewResults": "View assessment results",
     "readyEyebrow": "Administrator-reviewed report",
     "readyTitle": "Your report is ready!",
-    "readyBody": "Your personalised report was delivered on {date} and is available in your private WeightPilot space.",
+    "readyBody": "Your administrator-reviewed report has been available in your private WeightPilot space since {date}.",
     "viewLatestReport": "View my report",
     "messageAboutReport": "Ask a private question",
     "requestedTitle": "Your review request is awaiting review",

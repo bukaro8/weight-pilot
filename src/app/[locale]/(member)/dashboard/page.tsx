@@ -34,7 +34,7 @@ export default async function MemberDashboardPage({params}: {params: Promise<{lo
           <div className="flex size-12 items-center justify-center rounded-2xl bg-primary text-white"><FileText aria-hidden="true" size={22}/></div>
           <p className="mt-5 text-xs font-bold uppercase tracking-[0.16em] text-primary-hover">{t("readyEyebrow")}</p>
           <h2 id="report-ready-title" className="mt-2 font-display text-3xl font-semibold leading-tight text-primary-dark sm:text-4xl">{t("readyTitle")}</h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted sm:text-base">{t("readyBody", {date: date(data.latestReport.deliveredAt) ?? ""})}</p>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted sm:text-base">{t("readyBody", {date: date(data.latestReport.availableAt) ?? ""})}</p>
         </div>
         <div className="relative mt-6 flex w-full flex-col gap-3 sm:flex-row lg:mt-0 lg:w-auto lg:min-w-64 lg:flex-col">
           <Link href={`/reports/${data.latestReport.id}`} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary px-6 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">{t("viewLatestReport")}<ArrowRight aria-hidden="true" size={18}/></Link>

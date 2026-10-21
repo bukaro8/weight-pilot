@@ -6,10 +6,10 @@ import {ArrowLeft, MessageCircle} from "lucide-react";
 
 import {Link} from "@/i18n/navigation";
 
-export function MemberReportReader({emailHtml, assessmentReference, deliveredAt, locale}: {emailHtml: string; assessmentReference: string; deliveredAt: string; locale: "en" | "es"}) {
+export function MemberReportReader({emailHtml, assessmentReference, availableAt, locale}: {emailHtml: string; assessmentReference: string; availableAt: string; locale: "en" | "es"}) {
   const t = useTranslations("memberArea.reports");
   const [height, setHeight] = useState(900);
-  const date = new Intl.DateTimeFormat(locale, {dateStyle: "long"}).format(new Date(deliveredAt));
+  const date = new Intl.DateTimeFormat(locale, {dateStyle: "long"}).format(new Date(availableAt));
 
   return <main id="main-content" className="flex-1 bg-background">
     <section className="bg-primary-dark px-4 py-8 text-white sm:px-6 sm:py-10 lg:px-10">

@@ -4,15 +4,26 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(path, import.meta.url), "utf8");
 
-test("member report queries expose only delivered reports owned by the signed-in member", async () => {
+test("member report queries expose only accepted or delivered reports owned by the signed-in member", async () => {
   const source = await read("../src/features/reports/member.ts");
   assert.match(source, /eq\(questionnaire\.userId, userId\)/u);
   assert.match(source, /eq\(questionnaireReviewRequest\.requestedByUserId, userId\)/u);
+  assert.match(source, /eq\(consultationReport\.sendStatus, "ACCEPTED"\)/u);
   assert.match(source, /eq\(consultationReport\.sendStatus, "DELIVERED"\)/u);
+  assert.match(source, /isNotNull\(consultationReport\.providerMessageId\)/u);
+  assert.match(source, /isNotNull\(consultationReport\.acceptedAt\)/u);
   assert.match(source, /isNotNull\(consultationReport\.deliveredAt\)/u);
   assert.doesNotMatch(source, /questionnaireReviewRequest\.status, "COMPLETED"/u);
-  assert.doesNotMatch(source, /sendStatus, "ACCEPTED"/u);
   assert.match(source, /z\.uuid\(\)\.safeParse\(reportId\)/u);
+  const assessmentServer = await read("../src/features/assessment/server.ts");
+  assert.match(assessmentServer, /providerMessageId: consultationReport\.providerMessageId, acceptedAt: consultationReport\.acceptedAt/u);
+  assert.match(assessmentServer, /isMemberReportVisible\(/u);
+  const memberRoutes = await Promise.all([
+    read("../src/app/[locale]/(member)/reports/page.tsx"),
+    read("../src/app/[locale]/(member)/reports/[reportId]/page.tsx"),
+  ]);
+  assert.match(memberRoutes[0], /listMemberAvailableReports\(member\.id\)/u);
+  assert.match(memberRoutes[1], /getMemberAvailableReport\(member\.id, reportId\)/u);
 });
 
 test("member report reader rebuilds the delivered email from immutable saved content and savings snapshot", async () => {
@@ -20,7 +31,7 @@ test("member report reader rebuilds the delivered email from immutable saved con
   assert.match(source, /content: record\.report\.content/u);
   assert.match(source, /record\.report\.savingsComparisonEnabled \? record\.report\.savingsComparison : null/u);
   assert.match(source, /renderGuidanceReportEmail/u);
-  assert.match(source, /deliveredAt: record\.report\.deliveredAt\.toISOString\(\)/u);
+  assert.match(source, /availableAt: availableAt\.toISOString\(\)/u);
 });
 
 test("assessment results distinguish requested, in-review and delivered report states with report and message links", async () => {
@@ -55,7 +66,7 @@ test("member dashboard links to reports, messages and invitations and reads unre
   assert.match(page, /getMemberReportCardState/u);
   assert.match(page, /reportState === "REQUESTED" \|\| reportState === "IN_REVIEW"/u);
   assert.match(server, /countMemberUnreadMessages\(userId\)/u);
-  assert.match(server, /selectLatestDeliveredReport\(reports\)/u);
+  assert.match(server, /selectLatestMemberReport\(reports\)/u);
 });
 
 test("dashboard report copy is complete in English and Spanish without a misleading no-report state", async () => {
@@ -73,12 +84,26 @@ test("dashboard report copy is complete in English and Spanish without a mislead
   }
 });
 
-test("latest report selector handles empty and multiple delivered reports; delivered state wins over stale review status", async () => {
-  const {getMemberReportCardState, selectLatestDeliveredReport} = await import("../src/features/member-area/report-state.ts");
-  assert.equal(selectLatestDeliveredReport([]), null);
-  const latest = selectLatestDeliveredReport([
-    {id: "older", deliveredAt: "2026-02-01T10:00:00.000Z", assessmentReference: "WP-OLD", language: "en"},
-    {id: "newer", deliveredAt: "2026-03-01T10:00:00.000Z", assessmentReference: "WP-NEW", language: "es"},
+test("Resend-accepted and confirmed-delivery reports are visible, while draft, failed, sending and uncertain records are hidden", async () => {
+  const {isMemberReportVisible} = await import("../src/features/member-area/report-state.ts");
+  const accepted = {sendStatus: "ACCEPTED", providerMessageId: "re_123", acceptedAt: "2026-03-01T10:00:00.000Z", deliveredAt: null};
+  const delivered = {sendStatus: "DELIVERED", providerMessageId: "re_123", acceptedAt: "2026-03-01T10:00:00.000Z", deliveredAt: "2026-03-01T10:01:00.000Z"};
+  assert.equal(isMemberReportVisible(accepted), true, "accepted submission is available before the delivery webhook");
+  assert.equal(isMemberReportVisible(delivered), true);
+  for (const sendStatus of ["DRAFT", "SENDING", "FAILED"]) {
+    assert.equal(isMemberReportVisible({...accepted, sendStatus}), false, `${sendStatus} remains private`);
+  }
+  assert.equal(isMemberReportVisible({...accepted, providerMessageId: null}), false);
+  assert.equal(isMemberReportVisible({...accepted, acceptedAt: null}), false);
+  assert.equal(isMemberReportVisible({...delivered, deliveredAt: null}), false);
+});
+
+test("latest member report selector handles empty and multiple accepted/delivered reports; ready state wins over stale review status", async () => {
+  const {getMemberReportCardState, selectLatestMemberReport} = await import("../src/features/member-area/report-state.ts");
+  assert.equal(selectLatestMemberReport([]), null);
+  const latest = selectLatestMemberReport([
+    {id: "older", availableAt: "2026-02-01T10:00:00.000Z", assessmentReference: "WP-OLD", language: "en"},
+    {id: "newer", availableAt: "2026-03-01T10:00:00.000Z", assessmentReference: "WP-NEW", language: "es"},
   ]);
   assert.equal(latest?.id, "newer");
   assert.equal(getMemberReportCardState(true, "IN_REVIEW"), "READY");

@@ -5,8 +5,8 @@ import {and, desc, eq} from "drizzle-orm";
 import {getDb} from "@/db";
 import {questionnaire, questionnaireReviewRequest} from "@/db/schema";
 import {countMemberUnreadMessages} from "@/features/messages/server";
-import {listMemberDeliveredReports} from "@/features/reports/member";
-import {selectLatestDeliveredReport} from "@/features/member-area/report-state";
+import {listMemberAvailableReports} from "@/features/reports/member";
+import {selectLatestMemberReport} from "@/features/member-area/report-state";
 
 export async function getMemberDashboardOverview(userId: string) {
   const [latestQuestionnaire] = await getDb().select({
@@ -29,7 +29,7 @@ export async function getMemberDashboardOverview(userId: string) {
   }
 
   const [reports, unreadMessages] = await Promise.all([
-    listMemberDeliveredReports(userId),
+    listMemberAvailableReports(userId),
     countMemberUnreadMessages(userId),
   ]);
 
@@ -37,7 +37,7 @@ export async function getMemberDashboardOverview(userId: string) {
     assessmentStatus: latestQuestionnaire?.status ?? "NONE",
     assessmentUpdatedAt: latestQuestionnaire?.submittedAt?.toISOString() ?? latestQuestionnaire?.updatedAt.toISOString() ?? null,
     reviewStatus,
-    latestReport: selectLatestDeliveredReport(reports),
+    latestReport: selectLatestMemberReport(reports),
     unreadMessages,
   };
 }

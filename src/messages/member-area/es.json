@@ -24,7 +24,7 @@
     "viewResults": "Ver resultados de la evaluación",
     "readyEyebrow": "Informe revisado por el administrador",
     "readyTitle": "¡Tu informe está listo!",
-    "readyBody": "Tu informe personalizado se envió el {date} y está disponible en tu espacio privado de WeightPilot.",
+    "readyBody": "Tu informe revisado por el administrador está disponible en tu espacio privado de WeightPilot desde el {date}.",
     "viewLatestReport": "Ver mi informe",
     "messageAboutReport": "Hacer una pregunta privada",
     "requestedTitle": "Tu solicitud de revisión está pendiente",

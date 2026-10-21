@@ -1,6 +1,6 @@
 import "server-only";
 
-import {and, desc, eq, isNotNull} from "drizzle-orm";
+import {and, desc, eq, isNotNull, or, sql} from "drizzle-orm";
 import {z} from "zod";
 
 import {getDb} from "@/db";
@@ -11,22 +11,26 @@ import {publicInvitationOrigin} from "@/features/invitations/sharing";
 import {serializeQuestionnaire} from "@/features/questionnaire/server";
 import {renderGuidanceReportEmail} from "@/features/reports/email";
 import {buildEmailSummary} from "@/features/reports/summary";
+import {isMemberReportVisible} from "@/features/member-area/report-state";
 
 export type MemberReportListItem = {
   id: string;
   assessmentReference: string;
-  deliveredAt: string;
+  availableAt: string;
   language: "en" | "es";
 };
 
-function assessmentReference(reportId: string, deliveredAt: Date) {
-  const date = deliveredAt.toISOString().slice(0, 10).replaceAll("-", "");
+function assessmentReference(reportId: string, availableAt: Date) {
+  const date = availableAt.toISOString().slice(0, 10).replaceAll("-", "");
   return `WP-${date}-${reportId.slice(0, 6).toUpperCase()}`;
 }
 
-export async function listMemberDeliveredReports(userId: string): Promise<MemberReportListItem[]> {
+export async function listMemberAvailableReports(userId: string): Promise<MemberReportListItem[]> {
   const records = await getDb().select({
     id: consultationReport.id,
+    sendStatus: consultationReport.sendStatus,
+    providerMessageId: consultationReport.providerMessageId,
+    acceptedAt: consultationReport.acceptedAt,
     deliveredAt: consultationReport.deliveredAt,
     language: consultationReport.language,
   }).from(consultationReport)
@@ -36,19 +40,25 @@ export async function listMemberDeliveredReports(userId: string): Promise<Member
       eq(questionnaire.userId, userId),
       eq(questionnaireReviewRequest.requestedByUserId, userId),
       eq(questionnaire.status, "SUBMITTED"),
-      eq(consultationReport.sendStatus, "DELIVERED"),
-      isNotNull(consultationReport.deliveredAt),
-    )).orderBy(desc(consultationReport.deliveredAt));
+      or(
+        and(eq(consultationReport.sendStatus, "ACCEPTED"), isNotNull(consultationReport.providerMessageId), isNotNull(consultationReport.acceptedAt)),
+        and(eq(consultationReport.sendStatus, "DELIVERED"), isNotNull(consultationReport.providerMessageId), isNotNull(consultationReport.deliveredAt)),
+      ),
+    )).orderBy(desc(sql`coalesce(${consultationReport.deliveredAt}, ${consultationReport.acceptedAt})`));
 
-  return records.flatMap((record) => record.deliveredAt ? [{
-    id: record.id,
-    assessmentReference: assessmentReference(record.id, record.deliveredAt),
-    deliveredAt: record.deliveredAt.toISOString(),
-    language: record.language,
-  }] : []);
+  return records.flatMap((record) => {
+    const availableAt = record.deliveredAt ?? record.acceptedAt;
+    if (!availableAt || !isMemberReportVisible({...record, acceptedAt: record.acceptedAt, deliveredAt: record.deliveredAt})) return [];
+    return [{
+      id: record.id,
+      assessmentReference: assessmentReference(record.id, availableAt),
+      availableAt: availableAt.toISOString(),
+      language: record.language,
+    }];
+  });
 }
 
-export async function getMemberDeliveredReport(userId: string, reportId: string) {
+export async function getMemberAvailableReport(userId: string, reportId: string) {
   if (!z.uuid().safeParse(reportId).success) return null;
   const [record] = await getDb().select({
     report: consultationReport,
@@ -60,13 +70,17 @@ export async function getMemberDeliveredReport(userId: string, reportId: string)
     .innerJoin(user, eq(questionnaire.userId, user.id))
     .where(and(
       eq(consultationReport.id, reportId),
-      eq(consultationReport.sendStatus, "DELIVERED"),
-      isNotNull(consultationReport.deliveredAt),
+      or(
+        and(eq(consultationReport.sendStatus, "ACCEPTED"), isNotNull(consultationReport.providerMessageId), isNotNull(consultationReport.acceptedAt)),
+        and(eq(consultationReport.sendStatus, "DELIVERED"), isNotNull(consultationReport.providerMessageId), isNotNull(consultationReport.deliveredAt)),
+      ),
       eq(questionnaireReviewRequest.requestedByUserId, userId),
       eq(questionnaire.userId, userId),
       eq(questionnaire.status, "SUBMITTED"),
     )).limit(1);
-  if (!record?.report.deliveredAt) return null;
+  if (!record || !isMemberReportVisible({...record.report, acceptedAt: record.report.acceptedAt, deliveredAt: record.report.deliveredAt})) return null;
+  const availableAt = record.report.deliveredAt ?? record.report.acceptedAt;
+  if (!availableAt) return null;
 
   const questionnaireData = serializeQuestionnaire(record.questionnaire);
   const parsedOutcome = assessmentOutcomeSchema.safeParse(questionnaireData.assessmentOutcome);
@@ -85,8 +99,8 @@ export async function getMemberDeliveredReport(userId: string, reportId: string)
   return {
     id: record.report.id,
     language: record.report.language,
-    deliveredAt: record.report.deliveredAt.toISOString(),
-    assessmentReference: assessmentReference(record.report.id, record.report.deliveredAt),
+    availableAt: availableAt.toISOString(),
+    assessmentReference: assessmentReference(record.report.id, availableAt),
     emailHtml: email.html,
     savingsComparison: record.report.savingsComparisonEnabled ? record.report.savingsComparison : null,
   };

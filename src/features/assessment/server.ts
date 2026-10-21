@@ -5,6 +5,7 @@ import {and, eq} from "drizzle-orm";
 import {getDb} from "@/db";
 import {consultationReport, questionnaire, questionnaireReviewRequest} from "@/db/schema";
 import type {MemberReviewRequest, ReviewRequestStatus} from "@/features/assessment/types";
+import {isMemberReportVisible} from "@/features/member-area/report-state";
 
 function serializeReviewRequest(record: typeof questionnaireReviewRequest.$inferSelect, reportId: string | null = null): MemberReviewRequest {
   return {
@@ -18,7 +19,7 @@ function serializeReviewRequest(record: typeof questionnaireReviewRequest.$infer
 }
 
 export async function getMemberReviewRequest(userId: string, questionnaireId: string) {
-  const [record] = await getDb().select({review: questionnaireReviewRequest, reportId: consultationReport.id, sendStatus: consultationReport.sendStatus, deliveredAt: consultationReport.deliveredAt})
+  const [record] = await getDb().select({review: questionnaireReviewRequest, reportId: consultationReport.id, sendStatus: consultationReport.sendStatus, providerMessageId: consultationReport.providerMessageId, acceptedAt: consultationReport.acceptedAt, deliveredAt: consultationReport.deliveredAt})
     .from(questionnaireReviewRequest)
     .innerJoin(questionnaire, eq(questionnaireReviewRequest.questionnaireId, questionnaire.id))
     .leftJoin(consultationReport, eq(consultationReport.reviewRequestId, questionnaireReviewRequest.id))
@@ -27,7 +28,8 @@ export async function getMemberReviewRequest(userId: string, questionnaireId: st
       eq(questionnaire.userId, userId),
       eq(questionnaire.status, "SUBMITTED"),
     )).limit(1);
-  return record ? serializeReviewRequest(record.review, record.sendStatus === "DELIVERED" && record.deliveredAt ? record.reportId : null) : null;
+  const reportVisible = record ? isMemberReportVisible({sendStatus: record.sendStatus, providerMessageId: record.providerMessageId, acceptedAt: record.acceptedAt, deliveredAt: record.deliveredAt}) : false;
+  return record ? serializeReviewRequest(record.review, reportVisible ? record.reportId : null) : null;
 }
 
 export async function requestPersonalisedReview(userId: string, questionnaireId: string, reportLanguage: "en" | "es") {
