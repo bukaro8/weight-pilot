@@ -1,0 +1,1 @@
+ALTER TABLE "consultation_report" ADD COLUMN "savings_comparison_enabled" boolean DEFAULT false NOT NULL;

@@ -36,6 +36,8 @@ export const reportDraftSchema = z.object({
   }).nullable(),
   pharmacyReferencePriceId: z.uuid().nullable(),
   preserveExistingPharmacyEstimate: z.boolean().default(false),
+  includeSavingsComparison: z.boolean().default(false),
+  hypotheticalComparisonTreatment: z.enum(["SEMAGLUTIDE", "TIRZEPATIDE"]).nullable().default(null),
 }).strict();
 
 export const reportSendSchema = z.object({confirm: z.literal(true)});

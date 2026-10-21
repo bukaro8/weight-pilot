@@ -6,6 +6,7 @@ import {renderReportContent} from "../src/features/reports/content.ts";
 import {generateAiResearchPrompt} from "../src/features/reports/prompt.ts";
 import {parseReportAssessment, reportAssessmentSchema, reportDraftSchema} from "../src/features/reports/validation.ts";
 import {pharmacyReferenceUpdateSchema} from "../src/features/pricing/validation.ts";
+import {buildSavingsComparison, resolveComparisonTreatment} from "../src/features/reports/savings-comparison.ts";
 
 const questionnaire = {
   id: "questionnaire-id",
@@ -38,6 +39,63 @@ const assessment = {
   requiresIndividualAssessment: true,
   medicationInformation: "PROVIDED",
 };
+
+const pricing = {
+  treatments: {
+    SEMAGLUTIDE: {1: 3200, 2: 4600, 3: 6000, 4: 7000, 5: 7500},
+    TIRZEPATIDE: {1: 3600, 2: 4900, 3: 6500, 4: 7500, 5: 8000},
+  },
+  delivery: {STANDARD_NEXT_DAY: 600, GUARANTEED_NEXT_DAY: 1085},
+};
+
+const reference = (treatment, strengths, prices) => ({
+  source: {id: "boots-source", name: "Boots Online Doctor", url: "https://onlinedoctor.boots.com/weight-loss/important-info", referenceDate: "2026-10-21", updatedAt: "2026-10-21T00:00:00.000Z"},
+  prices: strengths.map((strength, index) => ({id: `${treatment}-${index}`, treatment, strength, periodMonths: 1, pricePence: prices[index]})),
+});
+
+test("16-month semaglutide and tirzepatide scenarios match all pharmacy strengths and calculate exact differences", () => {
+  const sema = buildSavingsComparison({treatment: "SEMAGLUTIDE", pricing, pharmacy: reference("SEMAGLUTIDE", ["0.25 mg", "0.5 mg", "1 mg", "1.7 mg", "2.4 mg"], [8900, 11900, 14900, 17900, 19900])});
+  assert.equal(sema.months.length, 16);
+  assert.deepEqual(sema.months.slice(0, 5).map(({strength}) => strength), ["0.25 mg", "0.5 mg", "1 mg", "1.7 mg", "2.4 mg"]);
+  assert.equal(sema.months[15].strength, "2.4 mg");
+  assert.equal(sema.weightPilotTreatmentCostPence, 110800);
+  assert.equal(sema.pharmacyTreatmentCostPence, 292400);
+  assert.equal(sema.differencePence, 181600);
+  assert.equal(sema.percentageLower, 62.1);
+
+  const tirz = buildSavingsComparison({treatment: "TIRZEPATIDE", pricing, pharmacy: reference("TIRZEPATIDE", ["2.5 mg", "5 mg", "7.5 mg", "10 mg", "12.5 mg", "15 mg"], [17900, 19900, 25900, 29900, 31900, 33900])});
+  assert.equal(tirz.months.length, 16);
+  assert.deepEqual(tirz.months.slice(0, 6).map(({strength}) => strength), ["2.5 mg", "5 mg", "7.5 mg", "10 mg", "12.5 mg", "15 mg"]);
+  assert.equal(tirz.months[15].strength, "15 mg");
+  assert.equal(tirz.weightPilotTreatmentCostPence, 118500);
+  assert.equal(tirz.pharmacyTreatmentCostPence, 498400);
+  assert.equal(tirz.differencePence, 379900);
+  assert.equal(tirz.percentageLower, 76.2);
+});
+
+test("comparison is withheld when any exact monthly strength or period is missing", () => {
+  const pharmacy = reference("SEMAGLUTIDE", ["0.25 mg", "0.5 mg", "1 mg", "1.7 mg"], [8900, 11900, 14900, 17900]);
+  assert.equal(buildSavingsComparison({treatment: "SEMAGLUTIDE", pricing, pharmacy}), null);
+  pharmacy.prices.push({id: "multi-month", treatment: "SEMAGLUTIDE", strength: "2.4 mg", periodMonths: 2, pricePence: 39000});
+  assert.equal(buildSavingsComparison({treatment: "SEMAGLUTIDE", pricing, pharmacy}), null);
+});
+
+test("REVIEW_REQUIRED never selects a comparison treatment without explicit admin choice", () => {
+  assert.equal(resolveComparisonTreatment("REVIEW_REQUIRED", null), null);
+  assert.equal(resolveComparisonTreatment("REVIEW_REQUIRED", "TIRZEPATIDE"), "TIRZEPATIDE");
+  assert.equal(resolveComparisonTreatment("SEMAGLUTIDE", "TIRZEPATIDE"), "SEMAGLUTIDE");
+});
+
+test("a saved comparison remains a historical snapshot after reference prices change", () => {
+  const source = reference("SEMAGLUTIDE", ["0.25 mg", "0.5 mg", "1 mg", "1.7 mg", "2.4 mg"], [8900, 11900, 14900, 17900, 19900]);
+  const savedSnapshot = buildSavingsComparison({treatment: "SEMAGLUTIDE", pricing, pharmacy: source});
+  source.prices[0].pricePence = 999999;
+  pricing.treatments.SEMAGLUTIDE[1] = 888888;
+  assert.equal(savedSnapshot.months[0].pharmacyPricePence, 8900);
+  assert.equal(savedSnapshot.months[0].weightPilotPricePence, 3200);
+  assert.equal(savedSnapshot.pharmacyTreatmentCostPence, 292400);
+  assert.equal(savedSnapshot.sourceReferenceDate, "2026-10-21");
+});
 
 test("AI prompt excludes known identity and treats questionnaire text as untrusted", () => {
   const prompt = generateAiResearchPrompt({questionnaire, assessment, language: "en", identityValues: ["Member Name", "member@example.com"]});
@@ -97,12 +155,12 @@ test("report rendering escapes HTML and links only HTTPS sources", () => {
   assert.equal(html.includes('href="javascript:'), false);
 });
 
-test("report email template includes private conversation and optional estimates in both locales", async () => {
+test("report email template includes private conversation and bilingual comparison disclosures", async () => {
   const source = await readFile(new URL("../src/features/reports/email.ts", import.meta.url), "utf8");
-  for (const required of ["Hello ${name}", "Hola ${name}", "messagesUrl", "referenceEstimate", "pharmacyEstimate", "safeHttps", "escapeHtml(translated.greeting(safeName))"]) {
+  for (const required of ["Hello ${name}", "Hola ${name}", "messagesUrl", "referenceEstimate", "pharmacyEstimate", "safeHttps", "escapeHtml(translated.greeting(safeName))", "Your potential savings over 16 months", "Tu posible ahorro en 16 meses", "Illustrative medicine costs", "Costes ilustrativos del medicamento"]) {
     assert.ok(source.includes(required), `expected report email behavior: ${required}`);
   }
-  assert.match(source, /\$\{summaryHtml\}\$\{reportHtml\}\$\{referenceHtml\}\$\{pharmacyHtml\}\$\{messagesHtml\}/u);
+  assert.match(source, /\$\{summaryHtml\}\$\{reportHtml\}\$\{savingsHtml\}\$\{referenceHtml\}\$\{pharmacyHtml\}\$\{messagesHtml\}/u);
 });
 
 test("drafts select saved pharmacy references instead of accepting client supplied pharmacy prices", () => {
@@ -133,6 +191,17 @@ test("migration adds the dated Boots source and all supplied monthly tiers", asy
   assert.match(migration, /'SEMAGLUTIDE', '2\.4 mg', 19900/u);
   assert.match(migration, /'TIRZEPATIDE', '15 mg', 33900/u);
   assert.equal((migration.match(/'SEMAGLUTIDE'|'TIRZEPATIDE'/gu) ?? []).length, 11);
+});
+
+test("report comparison migrations add snapshot and opt-in fields without touching existing records", async () => {
+  const snapshotMigration = await readFile(new URL("../drizzle/0012_fuzzy_jigsaw.sql", import.meta.url), "utf8");
+  const enabledMigration = await readFile(new URL("../drizzle/0013_fat_storm.sql", import.meta.url), "utf8");
+  const journal = JSON.parse(await readFile(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8"));
+  assert.match(snapshotMigration, /ADD COLUMN "savings_comparison" jsonb/u);
+  assert.match(enabledMigration, /ADD COLUMN "savings_comparison_enabled" boolean DEFAULT false NOT NULL/u);
+  assert.equal(journal.entries.at(-2).tag, "0012_fuzzy_jigsaw");
+  assert.equal(journal.entries.at(-1).tag, "0013_fat_storm");
+  assert.doesNotMatch(snapshotMigration + enabledMigration, /DROP TABLE|TRUNCATE|DELETE FROM|UPDATE "consultation_report"/iu);
 });
 
 test("new pharmacy controls and report guidance are translated in both languages", async () => {

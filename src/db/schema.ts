@@ -250,6 +250,20 @@ export const consultationReport = pgTable(
       sourceUrl: string;
       asOfDate: string;
     } | null>(),
+    savingsComparison: jsonb("savings_comparison").$type<{
+      treatment: "SEMAGLUTIDE" | "TIRZEPATIDE";
+      hypothetical: boolean;
+      durationMonths: 16;
+      weightPilotTreatmentCostPence: number;
+      pharmacyTreatmentCostPence: number;
+      differencePence: number;
+      percentageLower: number;
+      sourceName: string;
+      sourceUrl: string;
+      sourceReferenceDate: string;
+      months: {month: number; strength: string; weightPilotPricePence: number; pharmacyPricePence: number}[];
+    } | null>(),
+    savingsComparisonEnabled: boolean("savings_comparison_enabled").notNull().default(false),
     sendStatus: reportSendStatus("send_status").notNull().default("DRAFT"),
     providerMessageId: text("provider_message_id").unique(),
     lastAttemptAt: timestamp("last_attempt_at", {withTimezone: true}),
