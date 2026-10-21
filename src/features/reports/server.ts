@@ -11,8 +11,8 @@ import {normalizeReportContent} from "@/features/reports/content";
 import {deliverGuidanceReport, renderGuidanceReportEmail, sendReviewRequestNotification} from "@/features/reports/email";
 import {generateAiResearchPrompt} from "@/features/reports/prompt";
 import {parseReportAssessment} from "@/features/reports/validation";
-import {buildSavingsComparison, resolveComparisonTreatment} from "@/features/reports/savings-comparison";
-import {getPharmacyReferenceData, getPricingBook, PricingConfigurationError} from "@/features/pricing/server";
+import {buildSavingsComparison, getMissingPharmacyReferenceStrengths, resolveComparisonTreatment, type SavingsComparisonSnapshot} from "@/features/reports/savings-comparison";
+import {getPharmacyReferenceData, getTreatmentPricing, PricingConfigurationError} from "@/features/pricing/server";
 import type {PharmacyReferenceData} from "@/features/pricing/types";
 import {publicInvitationOrigin} from "@/features/invitations/sharing";
 import type {ReportLanguage, ReportRecord, ReportWorkspaceData} from "@/features/reports/types";
@@ -34,7 +34,7 @@ function buildEmailSummary(questionnaireData: ReturnType<typeof serializeQuestio
 }
 
 export class ReportError extends Error {
-  constructor(public readonly code: "REPORT_NOT_FOUND" | "REPORT_LOCKED" | "REPORT_EMPTY" | "REPORT_INVALID_CONTENT" | "REPORT_ALREADY_SENT" | "RECIPIENT_UNVERIFIED" | "REPORT_SEND_FAILED" | "REPORT_PUBLIC_URL_NOT_CONFIGURED" | "REPORT_INVALID_PHARMACY") { super(code); }
+  constructor(public readonly code: "REPORT_NOT_FOUND" | "REPORT_LOCKED" | "REPORT_EMPTY" | "REPORT_INVALID_CONTENT" | "REPORT_ALREADY_SENT" | "RECIPIENT_UNVERIFIED" | "REPORT_SEND_FAILED" | "REPORT_PUBLIC_URL_NOT_CONFIGURED" | "REPORT_INVALID_PHARMACY" | "COMPARISON_PRICES_MISSING") { super(code); }
 }
 
 async function getReportPharmacyReferences(): Promise<PharmacyReferenceData> {
@@ -124,10 +124,16 @@ export async function saveReportDraft(adminId: string, reviewRequestId: string, 
   if (!parsed.success) throw new ReportError("REPORT_INVALID_CONTENT");
   const comparisonTreatment = resolveComparisonTreatment(parsed.data.recommendedTreatment, null);
   const comparisonEnabled = input.includeSavingsComparison && comparisonTreatment !== null;
-  const pricing = comparisonEnabled ? await getPricingBook() : null;
-  const savingsComparison = comparisonEnabled && pricing
-    ? buildSavingsComparison({treatment: comparisonTreatment, hypothetical: parsed.data.recommendedTreatment === "REVIEW_REQUIRED", pricing, pharmacy: await getReportPharmacyReferences()})
-    : null;
+  let savingsComparison: SavingsComparisonSnapshot | null = null;
+  if (comparisonEnabled) {
+    const pharmacy = await getReportPharmacyReferences();
+    if (!pharmacy.source.url || !pharmacy.source.referenceDate || getMissingPharmacyReferenceStrengths(comparisonTreatment, pharmacy).length) {
+      throw new ReportError("COMPARISON_PRICES_MISSING");
+    }
+    const pricing = await getTreatmentPricing();
+    savingsComparison = buildSavingsComparison({treatment: comparisonTreatment, hypothetical: false, pricing, pharmacy});
+    if (!savingsComparison) throw new ReportError("COMPARISON_PRICES_MISSING");
+  }
   const [updated] = await getDb().update(consultationReport).set({
     language: input.language, content,
     ...(comparisonEnabled ? {savingsComparison} : {}),
@@ -162,6 +168,7 @@ export async function sendReport(adminId: string, reviewRequestId: string) {
     if (!record.emailVerified) throw new ReportError("RECIPIENT_UNVERIFIED");
     if (!normalizeReportContent(record.report.content)) throw new ReportError("REPORT_EMPTY");
     if (!parseReportAssessment(record.report.content).success) throw new ReportError("REPORT_INVALID_CONTENT");
+    if (record.report.savingsComparisonEnabled && !record.report.savingsComparison) throw new ReportError("COMPARISON_PRICES_MISSING");
     if (["ACCEPTED", "DELIVERED", "SENDING"].includes(record.report.sendStatus)) throw new ReportError("REPORT_ALREADY_SENT");
     const now = new Date();
     const [locked] = await transaction.update(consultationReport).set({sendStatus: "SENDING", lastAttemptAt: now, failureCode: null, failedAt: null, updatedAt: now, sentByAdminId: adminId})

@@ -35,7 +35,7 @@ export type SavingsComparisonSnapshot = {
 export function buildSavingsComparison(input: {
   treatment: ReferenceTreatment;
   hypothetical?: boolean;
-  pricing: EditablePricing;
+  pricing: Pick<EditablePricing, "treatments">;
   pharmacy: PharmacyReferenceData;
 }): SavingsComparisonSnapshot | null {
   const strengths = titration[input.treatment];

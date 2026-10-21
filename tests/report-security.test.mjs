@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
+import {registerHooks} from "node:module";
 import test from "node:test";
 
 import {renderReportContent} from "../src/features/reports/content.ts";
@@ -71,6 +72,13 @@ test("16-month semaglutide and tirzepatide scenarios match all pharmacy strength
   assert.equal(tirz.pharmacyTreatmentCostPence, 498400);
   assert.equal(tirz.differencePence, 379900);
   assert.equal(tirz.percentageLower, 76.2);
+});
+
+test("medicine-only comparison does not require delivery prices", () => {
+  const pharmacy = reference("TIRZEPATIDE", ["2.5 mg", "5 mg", "7.5 mg", "10 mg", "12.5 mg", "15 mg"], [17900, 19900, 25900, 29900, 31900, 33900]);
+  const result = buildSavingsComparison({treatment: "TIRZEPATIDE", pricing: {treatments: pricing.treatments}, pharmacy});
+  assert.equal(result?.weightPilotTreatmentCostPence, 118500);
+  assert.equal(result?.pharmacyTreatmentCostPence, 498400);
 });
 
 test("comparison is withheld when any exact monthly strength or period is missing", () => {
@@ -169,6 +177,39 @@ test("report email template includes private conversation and bilingual comparis
   assert.match(source, /\$\{summaryHtml\}\$\{reportHtml\}\$\{savingsHtml\}\$\{referenceHtml\}\$\{pharmacyHtml\}\$\{messagesHtml\}/u);
 });
 
+test("approved comparison renders in EN/ES email and provider acceptance or failure is reported without a live send", async () => {
+  registerHooks({resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") return {url: "data:text/javascript,export%20default%20undefined", shortCircuit: true};
+    if (specifier === "resend") return {url: "data:text/javascript,export%20class%20Resend%7Bconstructor()%7Bthis.emails%3D%7Bsend%3Aasync()%3D%3EglobalThis.__reportResendResult%7D%7D%7D", shortCircuit: true};
+    if (specifier.startsWith("@/")) return nextResolve(new URL(`../src/${specifier.slice(2)}.ts`, import.meta.url).href, context);
+    return nextResolve(specifier, context);
+  }});
+  const {renderGuidanceReportEmail, deliverGuidanceReport} = await import("../src/features/reports/email.ts");
+  const comparison = buildSavingsComparison({treatment: "TIRZEPATIDE", pricing, pharmacy: reference("TIRZEPATIDE", ["2.5 mg", "5 mg", "7.5 mg", "10 mg", "12.5 mg", "15 mg"], [17900, 19900, 25900, 29900, 31900, 33900])});
+  const content = JSON.stringify({recommendedTreatment: "TIRZEPATIDE", confidence: "HIGH", reason: "Evidence supports discussing this option for the stated goal.", requiresMedicalReview: false});
+  for (const language of ["en", "es"]) {
+    const email = renderGuidanceReportEmail({language, memberName: "Test member", content, savingsComparison: comparison});
+    assert.match(email.html, /£1185\.00/u);
+    assert.match(email.html, /£4984\.00/u);
+    assert.match(email.html, /£3799\.00/u);
+    assert.match(email.html, language === "en" ? /Your potential savings over 16 months/u : /Tu posible ahorro en 16 meses/u);
+  }
+  const originalKey = process.env.RESEND_API_KEY;
+  const originalFrom = process.env.EMAIL_FROM;
+  process.env.RESEND_API_KEY = "test-key";
+  process.env.EMAIL_FROM = "test@example.invalid";
+  try {
+    globalThis.__reportResendResult = {data: {id: "test-provider-id"}, error: null};
+    assert.deepEqual(await deliverGuidanceReport({reportId: "test-report", language: "en", memberName: "Test member", recipient: "recipient@example.invalid", content, savingsComparison: comparison}), {ok: true, providerMessageId: "test-provider-id"});
+    globalThis.__reportResendResult = {data: null, error: {name: "test-error"}};
+    assert.deepEqual(await deliverGuidanceReport({reportId: "test-report", language: "en", memberName: "Test member", recipient: "recipient@example.invalid", content, savingsComparison: comparison}), {ok: false, failureCode: "PROVIDER_REJECTED"});
+  } finally {
+    if (originalKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = originalKey;
+    if (originalFrom === undefined) delete process.env.EMAIL_FROM; else process.env.EMAIL_FROM = originalFrom;
+    delete globalThis.__reportResendResult;
+  }
+});
+
 test("report saving is a hard prerequisite for sending and returns preview HTML after save", async () => {
   const route = await readFile(new URL("../src/app/api/admin/reports/[id]/route.ts", import.meta.url), "utf8");
   const workspace = await readFile(new URL("../src/components/reports/report-workspace.tsx", import.meta.url), "utf8");
@@ -177,6 +218,15 @@ test("report saving is a hard prerequisite for sending and returns preview HTML 
   assert.match(workspace, /if \(!\(await save\(language, content\)\)\) return;/u);
   assert.ok(workspace.indexOf("if (!(await save(language, content))) return;") < workspace.indexOf("/send`"));
   assert.match(workspace, /void save\(language, content, enabled\)/u);
+});
+
+test("missing comparison prices reject saving and an enabled comparison without a snapshot cannot be sent", async () => {
+  const server = await readFile(new URL("../src/features/reports/server.ts", import.meta.url), "utf8");
+  const pricingServer = await readFile(new URL("../src/features/pricing/server.ts", import.meta.url), "utf8");
+  assert.match(server, /throw new ReportError\("COMPARISON_PRICES_MISSING"\)/u);
+  assert.match(server, /record\.report\.savingsComparisonEnabled && !record\.report\.savingsComparison/u);
+  assert.match(server, /await getTreatmentPricing\(\)/u);
+  assert.match(pricingServer, /pricingUpdateSchema\.shape\.treatments\.safeParse/u);
 });
 
 test("report drafts accept one comparison toggle and reject legacy overlapping pricing payloads", () => {
@@ -216,9 +266,19 @@ test("report comparison migrations add snapshot and opt-in fields without touchi
   const journal = JSON.parse(await readFile(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8"));
   assert.match(snapshotMigration, /ADD COLUMN "savings_comparison" jsonb/u);
   assert.match(enabledMigration, /ADD COLUMN "savings_comparison_enabled" boolean DEFAULT false NOT NULL/u);
-  assert.equal(journal.entries.at(-2).tag, "0012_fuzzy_jigsaw");
-  assert.equal(journal.entries.at(-1).tag, "0013_fat_storm");
+  assert.equal(journal.entries.at(-3).tag, "0012_fuzzy_jigsaw");
+  assert.equal(journal.entries.at(-2).tag, "0013_fat_storm");
+  assert.equal(journal.entries.at(-1).tag, "0014_seed_missing_reference_prices");
   assert.doesNotMatch(snapshotMigration + enabledMigration, /DROP TABLE|TRUNCATE|DELETE FROM|UPDATE "consultation_report"/iu);
+});
+
+test("reference-price backfill inserts only the established defaults and preserves edited rows", async () => {
+  const seed = await readFile(new URL("../drizzle/0014_seed_missing_reference_prices.sql", import.meta.url), "utf8");
+  assert.match(seed, /ON CONFLICT \("treatment", "month_start"\) DO NOTHING/u);
+  assert.match(seed, /ON CONFLICT \("method"\) DO NOTHING/u);
+  assert.equal((seed.match(/\('(?:SEMAGLUTIDE|TIRZEPATIDE)', [1-5], \d+\)/gu) ?? []).length, 10);
+  assert.equal((seed.match(/\('(?:STANDARD_NEXT_DAY|GUARANTEED_NEXT_DAY)', \d+\)/gu) ?? []).length, 2);
+  assert.doesNotMatch(seed, /DELETE|TRUNCATE|UPDATE|DROP/u);
 });
 
 test("new pharmacy controls and report guidance are translated in both languages", async () => {

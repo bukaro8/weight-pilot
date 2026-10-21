@@ -20,6 +20,18 @@ export class PricingConfigurationError extends Error {
   constructor() { super("PRICING_NOT_INITIALISED"); }
 }
 
+// Report comparisons exclude delivery, so they require only treatment tiers.
+export async function getTreatmentPricing() {
+  const rows = await getDb().select().from(treatmentReferencePrice);
+  const treatments = Object.fromEntries(referenceTreatments.map((treatment) => [
+    treatment,
+    Object.fromEntries(rows.filter((row) => row.treatment === treatment).map((row) => [row.monthStart, row.pricePence])),
+  ]));
+  const parsed = pricingUpdateSchema.shape.treatments.safeParse(treatments);
+  if (!parsed.success) throw new PricingConfigurationError();
+  return {treatments: parsed.data};
+}
+
 export async function getPricingBook(): Promise<PricingBook> {
   const database = getDb();
   const [treatmentRows, deliveryRows] = await Promise.all([
