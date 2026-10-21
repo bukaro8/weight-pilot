@@ -1,6 +1,6 @@
 import "server-only";
 
-import {and, desc, eq} from "drizzle-orm";
+import {and, desc, eq, isNotNull} from "drizzle-orm";
 import {z} from "zod";
 
 import {getDb} from "@/db";
@@ -36,8 +36,8 @@ export async function listMemberDeliveredReports(userId: string): Promise<Member
       eq(questionnaire.userId, userId),
       eq(questionnaireReviewRequest.requestedByUserId, userId),
       eq(questionnaire.status, "SUBMITTED"),
-      eq(questionnaireReviewRequest.status, "COMPLETED"),
       eq(consultationReport.sendStatus, "DELIVERED"),
+      isNotNull(consultationReport.deliveredAt),
     )).orderBy(desc(consultationReport.deliveredAt));
 
   return records.flatMap((record) => record.deliveredAt ? [{
@@ -61,7 +61,7 @@ export async function getMemberDeliveredReport(userId: string, reportId: string)
     .where(and(
       eq(consultationReport.id, reportId),
       eq(consultationReport.sendStatus, "DELIVERED"),
-      eq(questionnaireReviewRequest.status, "COMPLETED"),
+      isNotNull(consultationReport.deliveredAt),
       eq(questionnaireReviewRequest.requestedByUserId, userId),
       eq(questionnaire.userId, userId),
       eq(questionnaire.status, "SUBMITTED"),

@@ -6,7 +6,7 @@ import {useState} from "react";
 
 import {Button} from "@/components/ui/button";
 import type {AssessmentOutcome, MemberReviewRequest} from "@/features/assessment/types";
-import {Link} from "@/i18n/navigation";
+import {Link, useRouter} from "@/i18n/navigation";
 import type {HealthCondition} from "@/features/questionnaire/validation";
 import {cn} from "@/lib/utils";
 
@@ -28,12 +28,13 @@ const sources = {
 
 export function TreatmentResults({questionnaireId, firstName, outcome, healthConditions, preferredReportLanguage, initialReviewRequest}: Props) {
   const t = useTranslations("assessmentResults");
+  const router = useRouter();
   const memberAreaT = useTranslations("memberArea.reviewStatus");
   const questionnaireT = useTranslations("questionnaire");
   const [reportLanguage, setReportLanguage] = useState<ReportLanguage>(initialReviewRequest?.reportLanguage ?? preferredReportLanguage);
-  const [reviewRequest, setReviewRequest] = useState(initialReviewRequest);
   const [requestState, setRequestState] = useState<"idle" | "submitting" | "error">("idle");
   const reviewRequired = outcome.decisionStatus === "REVIEW_REQUIRED";
+  const reviewRequest = initialReviewRequest;
   const reportReady = Boolean(reviewRequest?.reportId);
   const reviewTitle = reportReady
     ? memberAreaT("completedTitle")
@@ -56,10 +57,8 @@ export function TreatmentResults({questionnaireId, firstName, outcome, healthCon
         body: JSON.stringify({questionnaireId, reportLanguage}),
       });
       if (!response.ok) throw new Error("REQUEST_FAILED");
-      const body = await response.json() as {reviewRequest: MemberReviewRequest};
-      setReviewRequest(body.reviewRequest);
-      setReportLanguage(body.reviewRequest.reportLanguage);
       setRequestState("idle");
+      router.refresh();
     } catch { setRequestState("error"); }
   }
 

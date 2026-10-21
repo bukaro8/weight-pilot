@@ -18,7 +18,7 @@ function serializeReviewRequest(record: typeof questionnaireReviewRequest.$infer
 }
 
 export async function getMemberReviewRequest(userId: string, questionnaireId: string) {
-  const [record] = await getDb().select({review: questionnaireReviewRequest, reportId: consultationReport.id, sendStatus: consultationReport.sendStatus})
+  const [record] = await getDb().select({review: questionnaireReviewRequest, reportId: consultationReport.id, sendStatus: consultationReport.sendStatus, deliveredAt: consultationReport.deliveredAt})
     .from(questionnaireReviewRequest)
     .innerJoin(questionnaire, eq(questionnaireReviewRequest.questionnaireId, questionnaire.id))
     .leftJoin(consultationReport, eq(consultationReport.reviewRequestId, questionnaireReviewRequest.id))
@@ -27,7 +27,7 @@ export async function getMemberReviewRequest(userId: string, questionnaireId: st
       eq(questionnaire.userId, userId),
       eq(questionnaire.status, "SUBMITTED"),
     )).limit(1);
-  return record ? serializeReviewRequest(record.review, record.sendStatus === "DELIVERED" ? record.reportId : null) : null;
+  return record ? serializeReviewRequest(record.review, record.sendStatus === "DELIVERED" && record.deliveredAt ? record.reportId : null) : null;
 }
 
 export async function requestPersonalisedReview(userId: string, questionnaireId: string, reportLanguage: "en" | "es") {

@@ -3,6 +3,7 @@ import {getTranslations, setRequestLocale} from "next-intl/server";
 
 import {getFirstName} from "@/features/auth/name";
 import {getMemberDashboardOverview} from "@/features/member-area/server";
+import {getMemberReportCardState} from "@/features/member-area/report-state";
 import {Link, redirect} from "@/i18n/navigation";
 import type {Locale} from "@/i18n/routing";
 import {requireMember} from "@/lib/authorization";
@@ -16,7 +17,7 @@ export default async function MemberDashboardPage({params}: {params: Promise<{lo
   const date = (value: string | null) => value ? new Intl.DateTimeFormat(locale, {dateStyle: "medium"}).format(new Date(value)) : null;
   const assessmentHref = data.assessmentStatus === "SUBMITTED" ? "/consultations/results" : "/consultations";
   const assessmentAction = data.assessmentStatus === "SUBMITTED" ? t("viewResults") : t("continueAssessment");
-  const reportState = data.latestReport ? "ready" : data.reviewStatus === "IN_REVIEW" ? "inReview" : data.reviewStatus ? "pending" : "none";
+  const reportState = getMemberReportCardState(Boolean(data.latestReport), data.reviewStatus);
 
   return <main id="main-content" className="flex-1 bg-background">
     <section className="bg-primary-dark px-4 py-10 text-white sm:px-6 sm:py-14 lg:px-10">
@@ -27,9 +28,25 @@ export default async function MemberDashboardPage({params}: {params: Promise<{lo
       </div>
     </section>
     <div className="mx-auto max-w-6xl space-y-9 px-4 py-8 sm:px-6 sm:py-11 lg:px-10">
-      <section aria-label={t("quickLinks")} className="grid gap-4 md:grid-cols-3">
+      {reportState === "READY" && data.latestReport ? <section aria-labelledby="report-ready-title" className="relative overflow-hidden rounded-[1.75rem] border border-accent-strong/35 bg-pale-blush p-5 shadow-[0_18px_44px_rgba(20,42,71,0.09)] sm:p-8 lg:flex lg:items-center lg:justify-between lg:gap-10">
+        <div className="pointer-events-none absolute -right-12 -top-16 size-56 rounded-full border-[24px] border-white/45" aria-hidden="true"/>
+        <div className="relative min-w-0">
+          <div className="flex size-12 items-center justify-center rounded-2xl bg-primary text-white"><FileText aria-hidden="true" size={22}/></div>
+          <p className="mt-5 text-xs font-bold uppercase tracking-[0.16em] text-primary-hover">{t("readyEyebrow")}</p>
+          <h2 id="report-ready-title" className="mt-2 font-display text-3xl font-semibold leading-tight text-primary-dark sm:text-4xl">{t("readyTitle")}</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-muted sm:text-base">{t("readyBody", {date: date(data.latestReport.deliveredAt) ?? ""})}</p>
+        </div>
+        <div className="relative mt-6 flex w-full flex-col gap-3 sm:flex-row lg:mt-0 lg:w-auto lg:min-w-64 lg:flex-col">
+          <Link href={`/reports/${data.latestReport.id}`} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary px-6 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">{t("viewLatestReport")}<ArrowRight aria-hidden="true" size={18}/></Link>
+          <Link href="/messages" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-primary/20 bg-surface px-6 text-sm font-bold text-primary transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"><MessageCircle aria-hidden="true" size={17}/>{t("messageAboutReport")}</Link>
+        </div>
+      </section> : reportState === "REQUESTED" || reportState === "IN_REVIEW" ? <section aria-live="polite" className="flex items-start gap-4 rounded-2xl border border-primary/10 bg-surface px-4 py-4 sm:px-6">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-mist-blue text-primary"><FileText aria-hidden="true" size={19}/></div>
+        <div className="min-w-0"><h2 className="font-display text-xl font-semibold text-primary-dark">{t(reportState === "REQUESTED" ? "requestedTitle" : "preparingTitle")}</h2><p className="mt-1 text-sm leading-6 text-muted">{t(reportState === "REQUESTED" ? "requestedBody" : "preparingBody")}</p></div>
+      </section> : null}
+
+      <section aria-label={t("quickLinks")} className="grid gap-4 md:grid-cols-2">
         <OverviewCard icon={<ClipboardList aria-hidden="true" size={21}/>} title={t("assessmentTitle")} value={t(`assessment.${data.assessmentStatus}`)} detail={data.assessmentUpdatedAt ? t("assessmentUpdated", {date: date(data.assessmentUpdatedAt) ?? ""}) : undefined} href={assessmentHref} action={assessmentAction}/>
-        <OverviewCard icon={<FileText aria-hidden="true" size={21}/>} title={t("reportTitle")} value={t(`report.${reportState}`)} detail={data.latestReport ? t("assessmentUpdated", {date: date(data.latestReport.deliveredAt) ?? ""}) : undefined} href={data.latestReport ? `/reports/${data.latestReport.id}` : "/reports"} action={t("viewReports")}/>
         <OverviewCard icon={<MessageCircle aria-hidden="true" size={21}/>} title={t("messagesTitle")} value={data.unreadMessages ? t("unread", {count: data.unreadMessages}) : t("noUnread")} href="/messages" action={t("openMessages")}/>
       </section>
 
