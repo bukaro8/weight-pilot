@@ -6,7 +6,7 @@ import {renderReportContent} from "../src/features/reports/content.ts";
 import {generateAiResearchPrompt} from "../src/features/reports/prompt.ts";
 import {parseReportAssessment, reportAssessmentSchema, reportDraftSchema} from "../src/features/reports/validation.ts";
 import {pharmacyReferenceUpdateSchema} from "../src/features/pricing/validation.ts";
-import {buildSavingsComparison, resolveComparisonTreatment} from "../src/features/reports/savings-comparison.ts";
+import {buildSavingsComparison, getMissingPharmacyReferenceStrengths, resolveComparisonTreatment} from "../src/features/reports/savings-comparison.ts";
 
 const questionnaire = {
   id: "questionnaire-id",
@@ -76,8 +76,14 @@ test("16-month semaglutide and tirzepatide scenarios match all pharmacy strength
 test("comparison is withheld when any exact monthly strength or period is missing", () => {
   const pharmacy = reference("SEMAGLUTIDE", ["0.25 mg", "0.5 mg", "1 mg", "1.7 mg"], [8900, 11900, 14900, 17900]);
   assert.equal(buildSavingsComparison({treatment: "SEMAGLUTIDE", pricing, pharmacy}), null);
+  assert.deepEqual(getMissingPharmacyReferenceStrengths("SEMAGLUTIDE", pharmacy), ["2.4 mg"]);
   pharmacy.prices.push({id: "multi-month", treatment: "SEMAGLUTIDE", strength: "2.4 mg", periodMonths: 2, pricePence: 39000});
   assert.equal(buildSavingsComparison({treatment: "SEMAGLUTIDE", pricing, pharmacy}), null);
+});
+
+test("reference strength matching tolerates harmless whitespace and case differences", () => {
+  const pharmacy = reference("SEMAGLUTIDE", ["0.25mg", "0.5 MG", "1 mg", "1.7 mg", "2.4 mg"], [8900, 11900, 14900, 17900, 19900]);
+  assert.equal(buildSavingsComparison({treatment: "SEMAGLUTIDE", pricing, pharmacy})?.pharmacyTreatmentCostPence, 292400);
 });
 
 test("REVIEW_REQUIRED never selects a comparison treatment without explicit admin choice", () => {
@@ -163,14 +169,25 @@ test("report email template includes private conversation and bilingual comparis
   assert.match(source, /\$\{summaryHtml\}\$\{reportHtml\}\$\{savingsHtml\}\$\{referenceHtml\}\$\{pharmacyHtml\}\$\{messagesHtml\}/u);
 });
 
-test("drafts select saved pharmacy references instead of accepting client supplied pharmacy prices", () => {
+test("report saving is a hard prerequisite for sending and returns preview HTML after save", async () => {
+  const route = await readFile(new URL("../src/app/api/admin/reports/[id]/route.ts", import.meta.url), "utf8");
+  const workspace = await readFile(new URL("../src/components/reports/report-workspace.tsx", import.meta.url), "utf8");
+  assert.ok(route.indexOf("await saveReportDraft(currentUser.id") < route.indexOf("const workspace = await getReportWorkspace"));
+  assert.match(route, /previewHtml: workspace\.previewHtml/u);
+  assert.match(workspace, /if \(!\(await save\(language, content\)\)\) return;/u);
+  assert.ok(workspace.indexOf("if (!(await save(language, content))) return;") < workspace.indexOf("/send`"));
+  assert.match(workspace, /void save\(language, content, enabled\)/u);
+});
+
+test("report drafts accept one comparison toggle and reject legacy overlapping pricing payloads", () => {
   const content = JSON.stringify({recommendedTreatment: "REVIEW_REQUIRED", confidence: "INSUFFICIENT_INFORMATION", reason: "Medication information is unclear.", requiresMedicalReview: true});
-  const base = {language: "en", content, referenceScenario: null, pharmacyReferencePriceId: null, preserveExistingPharmacyEstimate: false};
+  const base = {language: "en", content};
   assert.equal(reportDraftSchema.safeParse(base).success, true);
+  assert.equal(reportDraftSchema.safeParse({...base, includeSavingsComparison: false}).success, true);
+  assert.equal(reportDraftSchema.safeParse({...base, includeSavingsComparison: true}).success, true);
   assert.equal(reportDraftSchema.safeParse({...base, content: "Plain text draft"}).success, false);
-  const referenceScenario = {treatment: "SEMAGLUTIDE", durationMonths: 16, deliveryMethod: "STANDARD_NEXT_DAY"};
-  assert.equal(reportDraftSchema.safeParse({...base, referenceScenario, pharmacyReferencePriceId: "00000000-0000-4000-8000-000000000001"}).success, true);
-  assert.equal(reportDraftSchema.safeParse({...base, pharmacyEstimate: {amountPence: 10000, sourceUrl: "https://example.test"}}).success, false);
+  assert.equal(reportDraftSchema.safeParse({...base, referenceScenario: null}).success, false);
+  assert.equal(reportDraftSchema.safeParse({...base, pharmacyReferencePriceId: "00000000-0000-4000-8000-000000000001"}).success, false);
 });
 
 test("pharmacy reference configuration validates public HTTPS source and pence values", () => {

@@ -39,9 +39,10 @@ export function buildSavingsComparison(input: {
   pharmacy: PharmacyReferenceData;
 }): SavingsComparisonSnapshot | null {
   const strengths = titration[input.treatment];
+  if (getMissingPharmacyReferenceStrengths(input.treatment, input.pharmacy).length) return null;
   const months = strengths.map((strength, index) => {
     const reference = input.pharmacy.prices.find((price) =>
-      price.treatment === input.treatment && price.strength === strength && price.periodMonths === 1);
+      price.treatment === input.treatment && normalizeStrength(price.strength) === normalizeStrength(strength) && price.periodMonths === 1);
     if (!reference || reference.pricePence <= 0) return null;
     const tier = Math.min(index + 1, 5) as 1 | 2 | 3 | 4 | 5;
     return {month: index + 1, strength, weightPilotPricePence: input.pricing.treatments[input.treatment][tier], pharmacyPricePence: reference.pricePence};
@@ -64,4 +65,14 @@ export function buildSavingsComparison(input: {
     sourceReferenceDate: input.pharmacy.source.referenceDate,
     months: completeMonths,
   };
+}
+
+function normalizeStrength(strength: string) {
+  return strength.trim().toLocaleLowerCase("en-GB").replace(/\s+/gu, "");
+}
+
+export function getMissingPharmacyReferenceStrengths(treatment: ReferenceTreatment, pharmacy: PharmacyReferenceData) {
+  return [...new Set(titration[treatment].filter((strength) => !pharmacy.prices.some((price) =>
+    price.treatment === treatment && normalizeStrength(price.strength) === normalizeStrength(strength) && price.periodMonths === 1,
+  )))];
 }

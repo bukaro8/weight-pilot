@@ -1,6 +1,7 @@
 import {adminApiError, adminApiSuccess, getAdminApiUser} from "@/features/admin/api";
 import {getReportWorkspace, ReportError, saveReportDraft} from "@/features/reports/server";
 import {reportDraftSchema, reportIdSchema} from "@/features/reports/validation";
+import {PricingConfigurationError} from "@/features/pricing/server";
 import {assertTrustedMutationOrigin} from "@/lib/request-security";
 
 export async function GET(request: Request, {params}: {params: Promise<{id: string}>}) {
@@ -31,6 +32,22 @@ export async function PUT(request: Request, {params}: {params: Promise<{id: stri
   } catch (error) {
     if (error instanceof Error && error.message === "UNTRUSTED_ORIGIN") return adminApiError("UNTRUSTED_ORIGIN", 403);
     if (error instanceof ReportError) return adminApiError(error.code, error.code === "REPORT_NOT_FOUND" ? 404 : error.code === "REPORT_INVALID_PHARMACY" ? 422 : 409);
+    if (error instanceof PricingConfigurationError) return adminApiError("PRICING_NOT_INITIALISED", 409);
+    const databaseCode = getDatabaseErrorCode(error);
+    if (databaseCode === "42703" || databaseCode === "42P01") return adminApiError("REPORT_SCHEMA_MIGRATION_REQUIRED", 409);
+    console.error("Admin report draft save failed", {errorName: error instanceof Error ? error.name : "UnknownError", databaseCode});
     return adminApiError("REPORT_SAVE_FAILED", 500);
   }
+}
+
+function getDatabaseErrorCode(error: unknown): string | undefined {
+  const visited = new Set<object>();
+  let candidate = error;
+  while (candidate && typeof candidate === "object" && !visited.has(candidate)) {
+    visited.add(candidate);
+    const current = candidate as {code?: unknown; cause?: unknown};
+    if (typeof current.code === "string" && /^[0-9A-Z]{5}$/u.test(current.code)) return current.code;
+    candidate = current.cause;
+  }
+  return undefined;
 }

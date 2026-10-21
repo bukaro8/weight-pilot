@@ -3,7 +3,7 @@ import "server-only";
 import {and, eq} from "drizzle-orm";
 
 import {getDb} from "@/db";
-import {consultationReport, pharmacyReferencePrice, pharmacyReferenceSource, questionnaire, questionnaireReviewRequest, reportDeliveryAttempt, user} from "@/db/schema";
+import {consultationReport, questionnaire, questionnaireReviewRequest, reportDeliveryAttempt, user} from "@/db/schema";
 import {assessmentOutcomeSchema} from "@/features/assessment/validation";
 import {calculatePreliminaryAssessment} from "@/features/assessment/engine";
 import {serializeQuestionnaire} from "@/features/questionnaire/server";
@@ -12,8 +12,8 @@ import {deliverGuidanceReport, renderGuidanceReportEmail, sendReviewRequestNotif
 import {generateAiResearchPrompt} from "@/features/reports/prompt";
 import {parseReportAssessment} from "@/features/reports/validation";
 import {buildSavingsComparison, resolveComparisonTreatment} from "@/features/reports/savings-comparison";
-import {calculateReferenceCost} from "@/features/pricing/calculations";
-import {getPharmacyReferenceData, getPricingBook} from "@/features/pricing/server";
+import {getPharmacyReferenceData, getPricingBook, PricingConfigurationError} from "@/features/pricing/server";
+import type {PharmacyReferenceData} from "@/features/pricing/types";
 import {publicInvitationOrigin} from "@/features/invitations/sharing";
 import type {ReportLanguage, ReportRecord, ReportWorkspaceData} from "@/features/reports/types";
 
@@ -35,6 +35,15 @@ function buildEmailSummary(questionnaireData: ReturnType<typeof serializeQuestio
 
 export class ReportError extends Error {
   constructor(public readonly code: "REPORT_NOT_FOUND" | "REPORT_LOCKED" | "REPORT_EMPTY" | "REPORT_INVALID_CONTENT" | "REPORT_ALREADY_SENT" | "RECIPIENT_UNVERIFIED" | "REPORT_SEND_FAILED" | "REPORT_PUBLIC_URL_NOT_CONFIGURED" | "REPORT_INVALID_PHARMACY") { super(code); }
+}
+
+async function getReportPharmacyReferences(): Promise<PharmacyReferenceData> {
+  try {
+    return await getPharmacyReferenceData();
+  } catch (error) {
+    if (!(error instanceof PricingConfigurationError)) throw error;
+    return {source: {id: "", name: "Boots Online Doctor", url: "", referenceDate: "", updatedAt: ""}, prices: []};
+  }
 }
 
 function serializeReport(record: typeof consultationReport.$inferSelect): ReportRecord {
@@ -80,15 +89,15 @@ export async function getReportWorkspace(reviewRequestId: string, promptLanguage
     questionnaireData.assessmentOutcome = assessment;
   }
   const report = serializeReport(record.report);
-  const pharmacyReferences = await getPharmacyReferenceData();
+  const pharmacyReferences = await getReportPharmacyReferences();
   const origin = publicInvitationOrigin(process.env.PUBLIC_APP_URL || process.env.BETTER_AUTH_URL);
   const messagesUrl = origin ? new URL(`/${report.language}/messages`, origin).toString() : "";
   const emailExtras = {
     summary: buildEmailSummary(questionnaireData, assessment.bmi, assessment.targetWeightLossPercentage, report.language),
     // The automatic comparison is the single like-for-like comparison in the email.
     // Keep older estimates on the report record, but do not display overlapping figures.
-    referenceEstimate: report.savingsComparison ? null : report.referenceEstimate,
-    pharmacyEstimate: report.savingsComparison ? null : report.referenceEstimate ? null : report.pharmacyEstimate,
+    referenceEstimate: null,
+    pharmacyEstimate: null,
     savingsComparison: report.savingsComparisonEnabled ? report.savingsComparison : null,
     messagesUrl,
   };
@@ -107,44 +116,20 @@ export async function getReportWorkspace(reviewRequestId: string, promptLanguage
 export async function saveReportDraft(adminId: string, reviewRequestId: string, input: {
   language: ReportLanguage;
   content: string;
-  referenceScenario: {treatment: "SEMAGLUTIDE" | "TIRZEPATIDE"; durationMonths: 6 | 12 | 16; deliveryMethod: "STANDARD_NEXT_DAY" | "GUARANTEED_NEXT_DAY"} | null;
-  pharmacyReferencePriceId: string | null;
-  preserveExistingPharmacyEstimate: boolean;
   includeSavingsComparison: boolean;
-  hypotheticalComparisonTreatment: "SEMAGLUTIDE" | "TIRZEPATIDE" | null;
 }) {
   await ensureReport(reviewRequestId);
   const content = normalizeReportContent(input.content);
   const parsed = parseReportAssessment(content);
   if (!parsed.success) throw new ReportError("REPORT_INVALID_CONTENT");
-  const comparisonTreatment = resolveComparisonTreatment(parsed.data.recommendedTreatment, input.hypotheticalComparisonTreatment);
+  const comparisonTreatment = resolveComparisonTreatment(parsed.data.recommendedTreatment, null);
   const comparisonEnabled = input.includeSavingsComparison && comparisonTreatment !== null;
-  const pricing = input.referenceScenario || comparisonEnabled ? await getPricingBook() : null;
-  const referenceEstimate = input.referenceScenario && pricing ? {
-    ...calculateReferenceCost(pricing, input.referenceScenario.treatment, input.referenceScenario.deliveryMethod, input.referenceScenario.durationMonths),
-    pricingUpdatedAt: pricing.updatedAt,
-  } : null;
-  let pharmacyEstimate = null;
-  if (input.pharmacyReferencePriceId) {
-    if (input.referenceScenario) throw new ReportError("REPORT_INVALID_PHARMACY");
-    const [reference] = await getDb().select({price: pharmacyReferencePrice, source: pharmacyReferenceSource})
-      .from(pharmacyReferencePrice).innerJoin(pharmacyReferenceSource, eq(pharmacyReferencePrice.sourceId, pharmacyReferenceSource.id))
-      .where(eq(pharmacyReferencePrice.id, input.pharmacyReferencePriceId)).limit(1);
-    if (!reference) throw new ReportError("REPORT_INVALID_PHARMACY");
-    pharmacyEstimate = {
-      referencePriceId: reference.price.id, treatment: reference.price.treatment, strength: reference.price.strength,
-      amountPence: reference.price.pricePence, periodMonths: reference.price.periodMonths,
-      sourceName: reference.source.name, sourceUrl: reference.source.url, asOfDate: reference.source.referenceDate,
-    };
-  } else if (input.preserveExistingPharmacyEstimate) {
-    const [existing] = await getDb().select({pharmacyEstimate: consultationReport.pharmacyEstimate}).from(consultationReport).where(eq(consultationReport.reviewRequestId, reviewRequestId)).limit(1);
-    pharmacyEstimate = existing?.pharmacyEstimate ?? null;
-  }
+  const pricing = comparisonEnabled ? await getPricingBook() : null;
   const savingsComparison = comparisonEnabled && pricing
-    ? buildSavingsComparison({treatment: comparisonTreatment, hypothetical: parsed.data.recommendedTreatment === "REVIEW_REQUIRED", pricing, pharmacy: await getPharmacyReferenceData()})
+    ? buildSavingsComparison({treatment: comparisonTreatment, hypothetical: parsed.data.recommendedTreatment === "REVIEW_REQUIRED", pricing, pharmacy: await getReportPharmacyReferences()})
     : null;
   const [updated] = await getDb().update(consultationReport).set({
-    language: input.language, content, referenceEstimate, pharmacyEstimate,
+    language: input.language, content,
     ...(comparisonEnabled ? {savingsComparison} : {}),
     savingsComparisonEnabled: comparisonEnabled,
     updatedAt: new Date(), updatedByAdminId: adminId,
@@ -155,7 +140,7 @@ export async function saveReportDraft(adminId: string, reviewRequestId: string, 
   if (!updated) {
     const [existing] = await getDb().select({status: consultationReport.sendStatus}).from(consultationReport).where(eq(consultationReport.reviewRequestId, reviewRequestId)).limit(1);
     if (existing?.status === "FAILED") {
-      const [retried] = await getDb().update(consultationReport).set({language: input.language, content, referenceEstimate, pharmacyEstimate, ...(comparisonEnabled ? {savingsComparison} : {}), savingsComparisonEnabled: comparisonEnabled, sendStatus: "DRAFT", failureCode: null, failedAt: null, updatedAt: new Date(), updatedByAdminId: adminId}).where(and(eq(consultationReport.reviewRequestId, reviewRequestId), eq(consultationReport.sendStatus, "FAILED"))).returning();
+      const [retried] = await getDb().update(consultationReport).set({language: input.language, content, ...(comparisonEnabled ? {savingsComparison} : {}), savingsComparisonEnabled: comparisonEnabled, sendStatus: "DRAFT", failureCode: null, failedAt: null, updatedAt: new Date(), updatedByAdminId: adminId}).where(and(eq(consultationReport.reviewRequestId, reviewRequestId), eq(consultationReport.sendStatus, "FAILED"))).returning();
       if (retried) return serializeReport(retried);
     }
     throw new ReportError("REPORT_LOCKED");
@@ -194,9 +179,9 @@ export async function sendReport(adminId: string, reviewRequestId: string) {
     reportId: prepared.report.id, language: prepared.report.language, memberName: prepared.memberName,
     recipient: prepared.memberEmail, content: prepared.report.content,
     summary: buildEmailSummary(questionnaireData, outcome.bmi, outcome.targetWeightLossPercentage, prepared.report.language),
-    referenceEstimate: prepared.report.savingsComparison ? null : prepared.report.referenceEstimate,
-    // Do not present one-month source prices alongside multi-month WeightPilot scenarios as if they were comparable.
-    pharmacyEstimate: prepared.report.savingsComparison ? null : prepared.report.referenceEstimate ? null : prepared.report.pharmacyEstimate,
+    // Legacy estimates remain stored on the report, but new report emails use only the unified comparison.
+    referenceEstimate: null,
+    pharmacyEstimate: null,
     savingsComparison: prepared.report.savingsComparisonEnabled ? prepared.report.savingsComparison : null,
     messagesUrl,
   });
