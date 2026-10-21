@@ -1,0 +1,23 @@
+{
+  "treatment": "Evidencia sobre el tratamiento para comentar",
+  "confidence": "Grado de confianza en la evidencia",
+  "reason": "Fundamento basado en evidencia",
+  "medicalReview": "Revisión médica adicional",
+  "reviewRequired": "Se requiere una revisión",
+  "notRequired": "Esta comparación no la indica",
+  "invalid": "Se requiere JSON válido",
+  "invalidHelp": "El informe debe ser JSON válido con el esquema exacto. Revisa los campos de tratamiento, confianza, motivo y revisión.",
+  "editorHelp": "Pega solo el JSON del modelo. Los campos se interpretan para revisarlos; una evaluación no válida o incompleta no se puede guardar ni enviar.",
+  "pastePlaceholder": "Pega aquí la evaluación JSON válida…",
+  "wordLimit": "La explicación no debe superar las 60 palabras.",
+  "treatments": {
+    "SEMAGLUTIDE": "Semaglutida",
+    "TIRZEPATIDE": "Tirzepatida",
+    "REVIEW_REQUIRED": "Se requiere una revisión adicional"
+  },
+  "confidenceLevels": {
+    "HIGH": "Alta",
+    "MODERATE": "Moderada",
+    "INSUFFICIENT_INFORMATION": "Información insuficiente"
+  }
+}

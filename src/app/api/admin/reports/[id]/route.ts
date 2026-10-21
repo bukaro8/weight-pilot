@@ -8,7 +8,11 @@ export async function GET(request: Request, {params}: {params: Promise<{id: stri
   if (!currentUser) return adminApiError("UNAUTHORISED", 401);
   const {id} = await params;
   if (!reportIdSchema.safeParse(id).success) return adminApiError("REPORT_NOT_FOUND", 404);
-  try { return adminApiSuccess({workspace: await getReportWorkspace(id)}); }
+  try {
+    const requestedLanguage = new URL(request.url).searchParams.get("language");
+    const language = requestedLanguage === "en" || requestedLanguage === "es" ? requestedLanguage : undefined;
+    return adminApiSuccess({workspace: await getReportWorkspace(id, language)});
+  }
   catch (error) { return adminApiError(error instanceof ReportError ? error.code : "REPORT_LOAD_FAILED", error instanceof ReportError ? 404 : 500); }
 }
 

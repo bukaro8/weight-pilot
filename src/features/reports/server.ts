@@ -10,6 +10,7 @@ import {serializeQuestionnaire} from "@/features/questionnaire/server";
 import {normalizeReportContent} from "@/features/reports/content";
 import {deliverGuidanceReport, renderGuidanceReportEmail, sendReviewRequestNotification} from "@/features/reports/email";
 import {generateAiResearchPrompt} from "@/features/reports/prompt";
+import {parseReportAssessment} from "@/features/reports/validation";
 import {calculateReferenceCost} from "@/features/pricing/calculations";
 import {getPharmacyReferenceData, getPricingBook} from "@/features/pricing/server";
 import {publicInvitationOrigin} from "@/features/invitations/sharing";
@@ -32,7 +33,7 @@ function buildEmailSummary(questionnaireData: ReturnType<typeof serializeQuestio
 }
 
 export class ReportError extends Error {
-  constructor(public readonly code: "REPORT_NOT_FOUND" | "REPORT_LOCKED" | "REPORT_EMPTY" | "REPORT_ALREADY_SENT" | "RECIPIENT_UNVERIFIED" | "REPORT_SEND_FAILED" | "REPORT_PUBLIC_URL_NOT_CONFIGURED" | "REPORT_INVALID_PHARMACY") { super(code); }
+  constructor(public readonly code: "REPORT_NOT_FOUND" | "REPORT_LOCKED" | "REPORT_EMPTY" | "REPORT_INVALID_CONTENT" | "REPORT_ALREADY_SENT" | "RECIPIENT_UNVERIFIED" | "REPORT_SEND_FAILED" | "REPORT_PUBLIC_URL_NOT_CONFIGURED" | "REPORT_INVALID_PHARMACY") { super(code); }
 }
 
 function serializeReport(record: typeof consultationReport.$inferSelect): ReportRecord {
@@ -57,7 +58,7 @@ async function ensureReport(reviewRequestId: string) {
   await database.insert(consultationReport).values({reviewRequestId, language: owner.language}).onConflictDoNothing({target: consultationReport.reviewRequestId});
 }
 
-export async function getReportWorkspace(reviewRequestId: string): Promise<ReportWorkspaceData> {
+export async function getReportWorkspace(reviewRequestId: string, promptLanguage?: ReportLanguage): Promise<ReportWorkspaceData> {
   await ensureReport(reviewRequestId);
   const [record] = await getDb().select({
     review: questionnaireReviewRequest, questionnaire, report: consultationReport,
@@ -93,7 +94,7 @@ export async function getReportWorkspace(reviewRequestId: string): Promise<Repor
     questionnaire: questionnaireData, assessment, report,
     pharmacyReferences,
     referenceEstimate: report.referenceEstimate, pharmacyEstimate: report.pharmacyEstimate, messagesUrl,
-    prompt: generateAiResearchPrompt({questionnaire: questionnaireData, assessment, language: report.language, identityValues: [record.memberName, record.memberEmail]}),
+    prompt: generateAiResearchPrompt({questionnaire: questionnaireData, assessment, language: promptLanguage ?? report.language, identityValues: [record.memberName, record.memberEmail]}),
     previewHtml: renderGuidanceReportEmail({language: report.language, memberName: record.memberName, content: report.content, ...emailExtras}).html,
   };
 }
@@ -159,6 +160,7 @@ export async function sendReport(adminId: string, reviewRequestId: string) {
     if (!record) throw new ReportError("REPORT_NOT_FOUND");
     if (!record.emailVerified) throw new ReportError("RECIPIENT_UNVERIFIED");
     if (!normalizeReportContent(record.report.content)) throw new ReportError("REPORT_EMPTY");
+    if (!parseReportAssessment(record.report.content).success) throw new ReportError("REPORT_INVALID_CONTENT");
     if (["ACCEPTED", "DELIVERED", "SENDING"].includes(record.report.sendStatus)) throw new ReportError("REPORT_ALREADY_SENT");
     const now = new Date();
     const [locked] = await transaction.update(consultationReport).set({sendStatus: "SENDING", lastAttemptAt: now, failureCode: null, failedAt: null, updatedAt: now, sentByAdminId: adminId})

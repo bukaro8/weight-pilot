@@ -1,0 +1,23 @@
+{
+  "treatment": "Treatment evidence to discuss",
+  "confidence": "Evidence confidence",
+  "reason": "Evidence-based rationale",
+  "medicalReview": "Further medical review",
+  "reviewRequired": "Review required",
+  "notRequired": "Not indicated by this comparison",
+  "invalid": "Valid JSON required",
+  "invalidHelp": "The report must be valid JSON using the exact schema. Check the treatment, confidence, reason and review fields.",
+  "editorHelp": "Paste the model's JSON only. The fields below are parsed for review, and an invalid or incomplete assessment cannot be saved or sent.",
+  "pastePlaceholder": "Paste the valid JSON assessment here…",
+  "wordLimit": "The explanation must be no more than 60 words.",
+  "treatments": {
+    "SEMAGLUTIDE": "Semaglutide",
+    "TIRZEPATIDE": "Tirzepatide",
+    "REVIEW_REQUIRED": "Further review required"
+  },
+  "confidenceLevels": {
+    "HIGH": "High",
+    "MODERATE": "Moderate",
+    "INSUFFICIENT_INFORMATION": "Insufficient information"
+  }
+}
