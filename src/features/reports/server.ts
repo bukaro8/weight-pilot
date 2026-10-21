@@ -1,6 +1,6 @@
 import "server-only";
 
-import {and, eq} from "drizzle-orm";
+import {and, eq, isNull} from "drizzle-orm";
 
 import {getDb} from "@/db";
 import {consultationReport, questionnaire, questionnaireReviewRequest, reportDeliveryAttempt, user} from "@/db/schema";
@@ -9,6 +9,7 @@ import {calculatePreliminaryAssessment} from "@/features/assessment/engine";
 import {serializeQuestionnaire} from "@/features/questionnaire/server";
 import {normalizeReportContent} from "@/features/reports/content";
 import {deliverGuidanceReport, renderGuidanceReportEmail, sendReviewRequestNotification} from "@/features/reports/email";
+import {ReportSettlementError, settleReportSend} from "@/features/reports/send-finalization";
 import {generateAiResearchPrompt} from "@/features/reports/prompt";
 import {parseReportAssessment} from "@/features/reports/validation";
 import {buildSavingsComparison, getMissingPharmacyReferenceStrengths, resolveComparisonTreatment, type SavingsComparisonSnapshot} from "@/features/reports/savings-comparison";
@@ -34,7 +35,7 @@ function buildEmailSummary(questionnaireData: ReturnType<typeof serializeQuestio
 }
 
 export class ReportError extends Error {
-  constructor(public readonly code: "REPORT_NOT_FOUND" | "REPORT_LOCKED" | "REPORT_EMPTY" | "REPORT_INVALID_CONTENT" | "REPORT_ALREADY_SENT" | "RECIPIENT_UNVERIFIED" | "REPORT_SEND_FAILED" | "REPORT_PUBLIC_URL_NOT_CONFIGURED" | "REPORT_INVALID_PHARMACY" | "COMPARISON_PRICES_MISSING") { super(code); }
+  constructor(public readonly code: "REPORT_NOT_FOUND" | "REPORT_LOCKED" | "REPORT_EMPTY" | "REPORT_INVALID_CONTENT" | "REPORT_ALREADY_SENT" | "RECIPIENT_UNVERIFIED" | "REPORT_PROVIDER_REJECTED" | "REPORT_EMAIL_NOT_CONFIGURED" | "REPORT_SEND_UNCERTAIN" | "REPORT_ACCEPTANCE_UNRECORDED" | "REPORT_DATABASE_FAILED" | "REPORT_PUBLIC_URL_NOT_CONFIGURED" | "REPORT_INVALID_PHARMACY" | "COMPARISON_PRICES_MISSING") { super(code); }
 }
 
 async function getReportPharmacyReferences(): Promise<PharmacyReferenceData> {
@@ -146,7 +147,7 @@ export async function saveReportDraft(adminId: string, reviewRequestId: string, 
   if (!updated) {
     const [existing] = await getDb().select({status: consultationReport.sendStatus}).from(consultationReport).where(eq(consultationReport.reviewRequestId, reviewRequestId)).limit(1);
     if (existing?.status === "FAILED") {
-      const [retried] = await getDb().update(consultationReport).set({language: input.language, content, ...(comparisonEnabled ? {savingsComparison} : {}), savingsComparisonEnabled: comparisonEnabled, sendStatus: "DRAFT", failureCode: null, failedAt: null, updatedAt: new Date(), updatedByAdminId: adminId}).where(and(eq(consultationReport.reviewRequestId, reviewRequestId), eq(consultationReport.sendStatus, "FAILED"))).returning();
+      const [retried] = await getDb().update(consultationReport).set({language: input.language, content, ...(comparisonEnabled ? {savingsComparison} : {}), savingsComparisonEnabled: comparisonEnabled, sendStatus: "DRAFT", failureCode: null, failedAt: null, updatedAt: new Date(), updatedByAdminId: adminId}).where(and(eq(consultationReport.reviewRequestId, reviewRequestId), eq(consultationReport.sendStatus, "FAILED"), isNull(consultationReport.providerMessageId))).returning();
       if (retried) return serializeReport(retried);
     }
     throw new ReportError("REPORT_LOCKED");
@@ -162,6 +163,7 @@ export async function sendReport(adminId: string, reviewRequestId: string) {
     const [record] = await transaction.select({report: consultationReport, memberName: user.name, memberEmail: user.email, emailVerified: user.emailVerified, questionnaire})
       .from(consultationReport)
       .innerJoin(questionnaireReviewRequest, eq(consultationReport.reviewRequestId, questionnaireReviewRequest.id))
+      .innerJoin(questionnaire, eq(questionnaireReviewRequest.questionnaireId, questionnaire.id))
       .innerJoin(user, eq(questionnaireReviewRequest.requestedByUserId, user.id))
       .where(eq(consultationReport.reviewRequestId, reviewRequestId)).limit(1).for("update");
     if (!record) throw new ReportError("REPORT_NOT_FOUND");
@@ -169,12 +171,16 @@ export async function sendReport(adminId: string, reviewRequestId: string) {
     if (!normalizeReportContent(record.report.content)) throw new ReportError("REPORT_EMPTY");
     if (!parseReportAssessment(record.report.content).success) throw new ReportError("REPORT_INVALID_CONTENT");
     if (record.report.savingsComparisonEnabled && !record.report.savingsComparison) throw new ReportError("COMPARISON_PRICES_MISSING");
-    if (["ACCEPTED", "DELIVERED", "SENDING"].includes(record.report.sendStatus)) throw new ReportError("REPORT_ALREADY_SENT");
+    if (record.report.providerMessageId || ["ACCEPTED", "DELIVERED", "SENDING"].includes(record.report.sendStatus)) throw new ReportError("REPORT_ALREADY_SENT");
     const now = new Date();
     const [locked] = await transaction.update(consultationReport).set({sendStatus: "SENDING", lastAttemptAt: now, failureCode: null, failedAt: null, updatedAt: now, sentByAdminId: adminId})
       .where(and(eq(consultationReport.id, record.report.id), eq(consultationReport.sendStatus, record.report.sendStatus))).returning();
     if (!locked) throw new ReportError("REPORT_ALREADY_SENT");
     return {report: locked, memberName: record.memberName, memberEmail: record.memberEmail, questionnaire: record.questionnaire};
+  }).catch((error: unknown) => {
+    if (error instanceof ReportError) throw error;
+    console.error("Report send preparation failed", {stage: "database", code: databaseErrorCode(error)});
+    throw new ReportError("REPORT_DATABASE_FAILED");
   });
 
   const messagesUrl = new URL(`/${prepared.report.language}/messages`, origin).toString();
@@ -193,24 +199,40 @@ export async function sendReport(adminId: string, reviewRequestId: string) {
     messagesUrl,
   });
   const now = new Date();
-  if (!delivery.ok) {
-    await database.transaction(async (transaction) => {
-      await transaction.update(consultationReport).set({sendStatus: "FAILED", failureCode: delivery.failureCode, failedAt: now, updatedAt: now})
-        .where(and(eq(consultationReport.id, prepared.report.id), eq(consultationReport.sendStatus, "SENDING")));
-      await transaction.insert(reportDeliveryAttempt).values({reportId: prepared.report.id, status: "FAILED", failureCode: delivery.failureCode, attemptedAt: now, adminId});
+  let accepted: typeof consultationReport.$inferSelect;
+  try {
+    accepted = await settleReportSend(delivery, {
+      recordAccepted: async (providerMessageId) => database.transaction(async (transaction) => {
+        const [updated] = await transaction.update(consultationReport).set({sendStatus: "ACCEPTED", providerMessageId, acceptedAt: now, updatedAt: now})
+          .where(and(eq(consultationReport.id, prepared.report.id), eq(consultationReport.sendStatus, "SENDING"))).returning();
+        if (!updated) throw new Error("REPORT_STATUS_CHANGED");
+        await transaction.insert(reportDeliveryAttempt).values({reportId: prepared.report.id, status: "ACCEPTED", providerMessageId, attemptedAt: now, adminId});
+        await transaction.update(questionnaireReviewRequest).set({status: "IN_REVIEW", updatedAt: now, updatedByAdminId: adminId})
+          .where(and(eq(questionnaireReviewRequest.id, reviewRequestId), eq(questionnaireReviewRequest.status, "REQUESTED")));
+        return updated;
+      }),
+      recordRejected: async (failureCode) => database.transaction(async (transaction) => {
+        const [failed] = await transaction.update(consultationReport).set({sendStatus: "FAILED", failureCode, failedAt: now, updatedAt: now})
+          .where(and(eq(consultationReport.id, prepared.report.id), eq(consultationReport.sendStatus, "SENDING"))).returning();
+        if (!failed) throw new Error("REPORT_STATUS_CHANGED");
+        await transaction.insert(reportDeliveryAttempt).values({reportId: prepared.report.id, status: "FAILED", failureCode, attemptedAt: now, adminId});
+      }),
+      recordUncertain: async (failureCode) => { await database.update(consultationReport).set({failureCode, updatedAt: now})
+        .where(and(eq(consultationReport.id, prepared.report.id), eq(consultationReport.sendStatus, "SENDING"))); },
+      onPersistenceError: (stage, error) => console.error("Report send state could not be recorded", {stage, code: databaseErrorCode(error)}),
     });
-    throw new ReportError("REPORT_SEND_FAILED");
+  } catch (error) {
+    if (!(error instanceof ReportSettlementError)) throw error;
+    throw new ReportError(error.code === "PROVIDER_REJECTED" ? "REPORT_PROVIDER_REJECTED"
+      : error.code === "EMAIL_NOT_CONFIGURED" ? "REPORT_EMAIL_NOT_CONFIGURED"
+      : error.code === "ACCEPTANCE_UNRECORDED" ? "REPORT_ACCEPTANCE_UNRECORDED" : "REPORT_SEND_UNCERTAIN");
   }
-  const [accepted] = await database.transaction(async (transaction) => {
-    const updated = await transaction.update(consultationReport).set({sendStatus: "ACCEPTED", providerMessageId: delivery.providerMessageId, acceptedAt: now, updatedAt: now})
-      .where(and(eq(consultationReport.id, prepared.report.id), eq(consultationReport.sendStatus, "SENDING"))).returning();
-    await transaction.insert(reportDeliveryAttempt).values({reportId: prepared.report.id, status: "ACCEPTED", providerMessageId: delivery.providerMessageId, attemptedAt: now, adminId});
-    await transaction.update(questionnaireReviewRequest).set({status: "IN_REVIEW", updatedAt: now, updatedByAdminId: adminId})
-      .where(and(eq(questionnaireReviewRequest.id, reviewRequestId), eq(questionnaireReviewRequest.status, "REQUESTED")));
-    return updated;
-  });
-  if (!accepted) throw new ReportError("REPORT_SEND_FAILED");
   return serializeReport(accepted);
+}
+
+function databaseErrorCode(error: unknown): string | undefined {
+  const cause = error && typeof error === "object" && "cause" in error ? error.cause : error;
+  return cause && typeof cause === "object" && "code" in cause && typeof cause.code === "string" ? cause.code : undefined;
 }
 
 export async function applyResendDeliveryEvent(input: {type: string; providerMessageId: string}) {

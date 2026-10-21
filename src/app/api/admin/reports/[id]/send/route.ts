@@ -16,9 +16,10 @@ export async function POST(request: Request, {params}: {params: Promise<{id: str
   } catch (error) {
     if (error instanceof Error && error.message === "UNTRUSTED_ORIGIN") return adminApiError("UNTRUSTED_ORIGIN", 403);
     if (error instanceof ReportError) {
-      const status = error.code === "REPORT_NOT_FOUND" ? 404 : error.code === "REPORT_INVALID_CONTENT" ? 422 : error.code === "REPORT_SEND_FAILED" ? 502 : 409;
+      const status = error.code === "REPORT_NOT_FOUND" ? 404 : error.code === "REPORT_INVALID_CONTENT" || error.code === "REPORT_EMPTY" ? 422 : error.code === "REPORT_PROVIDER_REJECTED" ? 502 : error.code === "REPORT_EMAIL_NOT_CONFIGURED" || error.code === "REPORT_SEND_UNCERTAIN" || error.code === "REPORT_ACCEPTANCE_UNRECORDED" || error.code === "REPORT_DATABASE_FAILED" ? 503 : 409;
       return adminApiError(error.code, status);
     }
-    return adminApiError("REPORT_SEND_FAILED", 500);
+    console.error("Report send failed outside a classified stage", {errorName: error instanceof Error ? error.name : "UnknownError"});
+    return adminApiError("REPORT_SEND_UNCERTAIN", 500);
   }
 }

@@ -16,7 +16,7 @@
   "hypotheticalComparisonOnly": "Comparación hipotética únicamente",
   "hypotheticalTreatment": "Elige un tratamiento hipotético para esta comparación",
   "chooseHypotheticalTreatment": "Elige un tratamiento",
-  "includeComparison": "Incluir esta comparación en el correo",
+  "includeComparison": "Incluir la comparación de ahorro a 16 meses en el correo",
   "comparisonUnavailable": "No hay una comparación completa de 16 meses guardada. Revisa la fuente de farmacia y las concentraciones mensuales en la configuración de precios.",
   "comparisonMissing": "Faltan precios mensuales de referencia de Boots para: {strengths}. No se mostrarán totales. Añade esas referencias en la configuración de precios; no se han estimado precios.",
   "pricingUnavailable": "Faltan precios mensuales de tratamiento de WeightPilot. Añade los tramos que faltan en la configuración de precios antes de guardar esta comparación.",

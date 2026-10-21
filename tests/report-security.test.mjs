@@ -8,6 +8,7 @@ import {generateAiResearchPrompt} from "../src/features/reports/prompt.ts";
 import {parseReportAssessment, reportAssessmentSchema, reportDraftSchema} from "../src/features/reports/validation.ts";
 import {pharmacyReferenceUpdateSchema} from "../src/features/pricing/validation.ts";
 import {buildSavingsComparison, getMissingPharmacyReferenceStrengths, resolveComparisonTreatment} from "../src/features/reports/savings-comparison.ts";
+import {ReportSettlementError, settleReportSend} from "../src/features/reports/send-finalization.ts";
 
 const questionnaire = {
   id: "questionnaire-id",
@@ -180,7 +181,7 @@ test("report email template includes private conversation and bilingual comparis
 test("approved comparison renders in EN/ES email and provider acceptance or failure is reported without a live send", async () => {
   registerHooks({resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") return {url: "data:text/javascript,export%20default%20undefined", shortCircuit: true};
-    if (specifier === "resend") return {url: "data:text/javascript,export%20class%20Resend%7Bconstructor()%7Bthis.emails%3D%7Bsend%3Aasync()%3D%3EglobalThis.__reportResendResult%7D%7D%7D", shortCircuit: true};
+    if (specifier === "resend") return {url: `data:text/javascript,${encodeURIComponent("export class Resend { constructor() { this.emails = {send: async (...args) => { globalThis.__reportResendCalls.push(args); if (globalThis.__reportResendResult instanceof Error) throw globalThis.__reportResendResult; return globalThis.__reportResendResult; }}; }}")}`, shortCircuit: true};
     if (specifier.startsWith("@/")) return nextResolve(new URL(`../src/${specifier.slice(2)}.ts`, import.meta.url).href, context);
     return nextResolve(specifier, context);
   }});
@@ -199,15 +200,89 @@ test("approved comparison renders in EN/ES email and provider acceptance or fail
   process.env.RESEND_API_KEY = "test-key";
   process.env.EMAIL_FROM = "test@example.invalid";
   try {
+    globalThis.__reportResendCalls = [];
     globalThis.__reportResendResult = {data: {id: "test-provider-id"}, error: null};
     assert.deepEqual(await deliverGuidanceReport({reportId: "test-report", language: "en", memberName: "Test member", recipient: "recipient@example.invalid", content, savingsComparison: comparison}), {ok: true, providerMessageId: "test-provider-id"});
+    assert.equal(globalThis.__reportResendCalls[0][1].idempotencyKey, "weightpilot-report-test-report");
     globalThis.__reportResendResult = {data: null, error: {name: "test-error"}};
-    assert.deepEqual(await deliverGuidanceReport({reportId: "test-report", language: "en", memberName: "Test member", recipient: "recipient@example.invalid", content, savingsComparison: comparison}), {ok: false, failureCode: "PROVIDER_REJECTED"});
+    assert.deepEqual(await deliverGuidanceReport({reportId: "test-report", language: "en", memberName: "Test member", recipient: "recipient@example.invalid", content, savingsComparison: comparison}), {ok: false, uncertain: false, failureCode: "PROVIDER_REJECTED"});
+    globalThis.__reportResendResult = new Error("simulated timeout");
+    assert.deepEqual(await deliverGuidanceReport({reportId: "test-report", language: "en", memberName: "Test member", recipient: "recipient@example.invalid", content, savingsComparison: comparison}), {ok: false, uncertain: true, failureCode: "PROVIDER_RESPONSE_UNCERTAIN"});
+    assert.equal(new Set(globalThis.__reportResendCalls.map((call) => call[1].idempotencyKey)).size, 1);
   } finally {
     if (originalKey === undefined) delete process.env.RESEND_API_KEY; else process.env.RESEND_API_KEY = originalKey;
     if (originalFrom === undefined) delete process.env.EMAIL_FROM; else process.env.EMAIL_FROM = originalFrom;
     delete globalThis.__reportResendResult;
+    delete globalThis.__reportResendCalls;
   }
+});
+
+test("send finalisation records acceptance exactly once and distinguishes it from delivery", async () => {
+  const calls = [];
+  const result = await settleReportSend({ok: true, providerMessageId: "provider-id"}, {
+    recordAccepted: async (id) => { calls.push(`accepted:${id}`); return {sendStatus: "ACCEPTED", providerMessageId: id}; },
+    recordRejected: async () => { calls.push("rejected"); },
+    recordUncertain: async () => { calls.push("uncertain"); },
+    onPersistenceError: () => { calls.push("database-error"); },
+  });
+  assert.deepEqual(result, {sendStatus: "ACCEPTED", providerMessageId: "provider-id"});
+  assert.deepEqual(calls, ["accepted:provider-id"]);
+});
+
+test("definite Resend rejection records failure, while missing configuration is distinct", async () => {
+  for (const [failureCode, expected] of [["PROVIDER_REJECTED", "PROVIDER_REJECTED"], ["EMAIL_NOT_CONFIGURED", "EMAIL_NOT_CONFIGURED"]]) {
+    const calls = [];
+    await assert.rejects(() => settleReportSend({ok: false, uncertain: false, failureCode}, {
+      recordAccepted: async () => { calls.push("accepted"); },
+      recordRejected: async (code) => { calls.push(code); },
+      recordUncertain: async () => { calls.push("uncertain"); },
+      onPersistenceError: () => { calls.push("database-error"); },
+    }), (error) => error instanceof ReportSettlementError && error.code === expected);
+    assert.deepEqual(calls, [failureCode]);
+  }
+});
+
+test("timeout stays uncertain and never records definite failure or retries delivery", async () => {
+  const calls = [];
+  await assert.rejects(() => settleReportSend({ok: false, uncertain: true, failureCode: "PROVIDER_RESPONSE_UNCERTAIN"}, {
+    recordAccepted: async () => { calls.push("accepted"); },
+    recordRejected: async () => { calls.push("rejected"); },
+    recordUncertain: async (code) => { calls.push(code); },
+    onPersistenceError: () => { calls.push("database-error"); },
+  }), (error) => error instanceof ReportSettlementError && error.code === "SEND_UNCERTAIN");
+  assert.deepEqual(calls, ["PROVIDER_RESPONSE_UNCERTAIN"]);
+});
+
+test("post-acceptance database failure is reported as uncertain and never records rejection", async () => {
+  const calls = [];
+  await assert.rejects(() => settleReportSend({ok: true, providerMessageId: "provider-id"}, {
+    recordAccepted: async () => { throw new Error("simulated database outage"); },
+    recordRejected: async () => { calls.push("rejected"); },
+    recordUncertain: async () => { calls.push("uncertain"); },
+    onPersistenceError: (stage) => { calls.push(stage); },
+  }), (error) => error instanceof ReportSettlementError && error.code === "ACCEPTANCE_UNRECORDED");
+  assert.deepEqual(calls, ["accepted"]);
+});
+
+test("a failed attempt-state write cannot be mistaken for a confirmed rejection", async () => {
+  const calls = [];
+  await assert.rejects(() => settleReportSend({ok: false, uncertain: false, failureCode: "PROVIDER_REJECTED"}, {
+    recordAccepted: async () => { calls.push("accepted"); },
+    recordRejected: async () => { throw new Error("simulated database outage"); },
+    recordUncertain: async () => { calls.push("uncertain"); },
+    onPersistenceError: (stage) => { calls.push(stage); },
+  }), (error) => error instanceof ReportSettlementError && error.code === "SEND_UNCERTAIN");
+  assert.deepEqual(calls, ["rejected"]);
+});
+
+test("send query joins questionnaire before selecting it and guards against duplicate submissions", async () => {
+  const server = await readFile(new URL("../src/features/reports/server.ts", import.meta.url), "utf8");
+  const send = server.slice(server.indexOf("export async function sendReport"), server.indexOf("export async function applyResendDeliveryEvent"));
+  assert.match(send, /\.innerJoin\(questionnaire, eq\(questionnaireReviewRequest\.questionnaireId, questionnaire\.id\)\)/u);
+  assert.match(send, /record\.report\.providerMessageId \|\| \["ACCEPTED", "DELIVERED", "SENDING"\]\.includes\(record\.report\.sendStatus\)/u);
+  assert.match(server, /isNull\(consultationReport\.providerMessageId\)/u);
+  assert.match(send, /eq\(consultationReport\.sendStatus, record\.report\.sendStatus\)/u);
+  assert.match(send, /await settleReportSend\(delivery/u);
 });
 
 test("report saving is a hard prerequisite for sending and returns preview HTML after save", async () => {
@@ -218,6 +293,17 @@ test("report saving is a hard prerequisite for sending and returns preview HTML 
   assert.match(workspace, /if \(!\(await save\(language, content\)\)\) return;/u);
   assert.ok(workspace.indexOf("if (!(await save(language, content))) return;") < workspace.indexOf("/send`"));
   assert.match(workspace, /void save\(language, content, enabled\)/u);
+});
+
+test("admin editor has one compact comparison checkbox and retains the final email preview", async () => {
+  const workspace = await readFile(new URL("../src/components/reports/report-workspace.tsx", import.meta.url), "utf8");
+  assert.match(workspace, /assessmentT\("includeComparison"\)/u);
+  assert.match(workspace, /srcDoc=\{previewHtml\}/u);
+  assert.doesNotMatch(workspace, /SavingsComparisonPreview|AmountCard|month-by-month costs/u);
+  const english = JSON.parse(await readFile(new URL("../src/messages/report-assessment/en.json", import.meta.url), "utf8"));
+  const spanish = JSON.parse(await readFile(new URL("../src/messages/report-assessment/es.json", import.meta.url), "utf8"));
+  assert.equal(english.includeComparison, "Include 16-month savings comparison in the email");
+  assert.match(spanish.includeComparison, /16 meses/u);
 });
 
 test("missing comparison prices reject saving and an enabled comparison without a snapshot cannot be sent", async () => {

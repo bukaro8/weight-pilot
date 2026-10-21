@@ -91,14 +91,15 @@ export function renderGuidanceReportEmail(input: {language: ReportLanguage; memb
 export async function deliverGuidanceReport(input: {reportId: string; language: ReportLanguage; memberName: string; recipient: string; content: string} & EmailExtras) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM;
-  if (!apiKey || !from) return {ok: false as const, failureCode: "EMAIL_NOT_CONFIGURED"};
+  if (!apiKey || !from) return {ok: false as const, uncertain: false as const, failureCode: "EMAIL_NOT_CONFIGURED"};
   const email = renderGuidanceReportEmail(input);
   try {
-    const result = await new Resend(apiKey).emails.send({from, to: input.recipient, ...email}, {idempotencyKey: `weightpilot-report-${input.reportId}`});
-    if (result.error || !result.data?.id) return {ok: false as const, failureCode: "PROVIDER_REJECTED"};
+    const result = await new Resend(apiKey).emails.send({from, to: input.recipient, ...email}, {idempotencyKey: `weightpilot-report-${input.reportId}`, signal: AbortSignal.timeout(20_000)});
+    if (result.error) return {ok: false as const, uncertain: false as const, failureCode: "PROVIDER_REJECTED"};
+    if (!result.data?.id) return {ok: false as const, uncertain: true as const, failureCode: "PROVIDER_RESPONSE_UNCERTAIN"};
     return {ok: true as const, providerMessageId: result.data.id};
   } catch {
-    return {ok: false as const, failureCode: "PROVIDER_UNAVAILABLE"};
+    return {ok: false as const, uncertain: true as const, failureCode: "PROVIDER_RESPONSE_UNCERTAIN"};
   }
 }
 

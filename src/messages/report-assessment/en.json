@@ -16,7 +16,7 @@
   "hypotheticalComparisonOnly": "Hypothetical comparison only",
   "hypotheticalTreatment": "Choose a hypothetical treatment for this comparison",
   "chooseHypotheticalTreatment": "Choose a treatment",
-  "includeComparison": "Include this comparison in the email",
+  "includeComparison": "Include 16-month savings comparison in the email",
   "comparisonUnavailable": "No complete 16-month comparison is saved. Check the pharmacy source and monthly strengths in Pricing settings.",
   "comparisonMissing": "Missing monthly Boots reference prices for: {strengths}. No totals will be shown. Add those references in Pricing settings; no prices have been estimated.",
   "pricingUnavailable": "WeightPilot monthly treatment prices are incomplete. Add the missing treatment tiers in Pricing settings before saving this comparison.",
