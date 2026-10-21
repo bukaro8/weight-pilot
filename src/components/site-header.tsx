@@ -9,9 +9,11 @@ import {authClient} from "@/features/auth/client";
 import {Link, usePathname} from "@/i18n/navigation";
 import {cn} from "@/lib/utils";
 import {LanguageToggle} from "./language-toggle";
+import {headerNavigationKind} from "@/features/navigation/visibility";
 
 const memberLinks = [["/", "home"], ["/consultations", "consultations"], ["/invitations", "invitations"], ["/messages", "messages"]] as const;
 const adminLinks = [["/", "home"], ["/admin", "admin"]] as const;
+const publicLinks = [["/", "home"]] as const;
 
 export function SiteHeader() {
   const t = useTranslations("nav");
@@ -19,7 +21,8 @@ export function SiteHeader() {
   const {data: session, isPending} = authClient.useSession();
   const [open, setOpen] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
-  const links = isPending ? adminLinks.slice(0, 1) : session?.user.role === "ADMIN" ? adminLinks : memberLinks;
+  const navigationKind = headerNavigationKind(isPending, session?.user.role);
+  const links = navigationKind === "admin" ? adminLinks : navigationKind === "member" ? memberLinks : publicLinks;
 
   useEffect(() => {
     let active = true;

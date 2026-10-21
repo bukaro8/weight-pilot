@@ -63,6 +63,7 @@ export function QuestionnaireFlow({initialQuestionnaire}: {initialQuestionnaire:
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [message, setMessage] = useState<string>();
   const [submitting, setSubmitting] = useState(false);
+  const [submissionStartedAt, setSubmissionStartedAt] = useState<number | null>(null);
   const questionnaireId = questionnaire.id;
   const questionnaireStatus = questionnaire.status;
   const answersRef = useRef(answers);
@@ -71,6 +72,7 @@ export function QuestionnaireFlow({initialQuestionnaire}: {initialQuestionnaire:
   const requestNumberRef = useRef(0);
   const changeVersionRef = useRef(0);
   const mountedRef = useRef(false);
+  const submittingRef = useRef(false);
 
   useEffect(() => { answersRef.current = answers; }, [answers]);
   useEffect(() => { stepRef.current = step; }, [step]);
@@ -148,8 +150,11 @@ export function QuestionnaireFlow({initialQuestionnaire}: {initialQuestionnaire:
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (submittingRef.current || questionnaire.status !== "DRAFT") return;
     const payload = toPayload(questionnaire.id, answers, 5);
     if (!questionnaireSubmissionSchema.safeParse(payload).success) { setMessage(t("errors.review")); return; }
+    submittingRef.current = true;
+    setSubmissionStartedAt(Date.now());
     setSubmitting(true); setMessage(undefined);
     try {
       await persist(payload);
@@ -158,11 +163,14 @@ export function QuestionnaireFlow({initialQuestionnaire}: {initialQuestionnaire:
       const body = await response.json() as {questionnaire: QuestionnaireData};
       setQuestionnaire(body.questionnaire);
       setSaveState("saved");
-      router.replace("/consultations/results");
-    } catch { setMessage(t("errors.submit")); } finally { setSubmitting(false); }
+    } catch { setSubmissionStartedAt(null); setMessage(t("errors.submit")); } finally { submittingRef.current = false; setSubmitting(false); }
   }
 
-  if (questionnaire.status === "SUBMITTED") return <SubmissionLoading/>;
+  if (submitting || questionnaire.status === "SUBMITTED") return <SubmissionLoading
+    startedAt={submissionStartedAt ?? 0}
+    ready={!submitting && questionnaire.status === "SUBMITTED"}
+    onComplete={() => router.replace("/consultations/results")}
+  />;
 
   const toggleHealth = (option: HealthCondition) => {
     const exclusive = option === "NONE" || option === "NOT_SURE";
@@ -302,6 +310,6 @@ function ReviewRow({label, value}: {label: string; value: string}) {
   return <div className="grid gap-1 text-sm min-[420px]:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] min-[420px]:gap-4"><span className="font-semibold text-primary-dark">{label}</span><span className="text-muted min-[420px]:text-right">{value}</span></div>;
 }
 
-function SubmissionLoading() {
-  return <AssessmentAnalysisLoading/>;
+function SubmissionLoading({startedAt, ready, onComplete}: {startedAt: number; ready: boolean; onComplete: () => void}) {
+  return <AssessmentAnalysisLoading startedAt={startedAt} ready={ready} onComplete={onComplete}/>;
 }

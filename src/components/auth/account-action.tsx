@@ -12,13 +12,17 @@ import {cn} from "@/lib/utils";
 
 export function AccountAction({className, tabIndex, onNavigate}: {className?: string; tabIndex?: number; onNavigate?: () => void}) {
   const t = useTranslations("nav");
+  const authText = useTranslations("auth");
   const locale = useLocale() as Locale;
   const router = useRouter();
   const {data: session, isPending} = authClient.useSession();
   const [signingOut, setSigningOut] = useState(false);
 
   if (isPending) return <span aria-hidden="true" className={cn(buttonVariants({variant: "secondary"}), "min-w-24 opacity-50", className)}/>;
-  if (!session) return <Link href="/login" tabIndex={tabIndex} onClick={onNavigate} className={cn(buttonVariants(), className)}>{t("signIn")}</Link>;
+  if (!session) return <div className={cn("flex gap-2", className?.includes("w-full") && "flex-col", className)}>
+    <Link href="/login" tabIndex={tabIndex} onClick={onNavigate} className={cn(buttonVariants(), "min-h-11")}>{t("signIn")}</Link>
+    <Link href="/register" tabIndex={tabIndex} onClick={onNavigate} className={cn(buttonVariants({variant: "secondary"}), "min-h-11")}>{authText("registrationLink")}</Link>
+  </div>;
 
   return (
     <button

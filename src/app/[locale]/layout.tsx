@@ -14,7 +14,7 @@ export function generateStaticParams() { return routing.locales.map((locale) => 
 export async function generateMetadata({params}: {params: Promise<{locale: string}>}): Promise<Metadata> {
   const {locale} = await params;
   const t = await getTranslations({locale, namespace: "metadata"});
-  const origin = publicInvitationOrigin(process.env.PUBLIC_APP_URL || process.env.BETTER_AUTH_URL) ?? "https://weightpilot.vicstack.uk";
+  const origin = publicInvitationOrigin(process.env.PUBLIC_APP_URL || process.env.BETTER_AUTH_URL) ?? "https://weightpilot.uk";
   const image = `/${locale}/opengraph-image`;
   return {
     metadataBase: new URL(origin),

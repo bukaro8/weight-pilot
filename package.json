@@ -17,8 +17,9 @@
     "test:assessment-decision": "node --no-warnings --experimental-strip-types --test tests/assessment-decision.test.mjs",
     "test:invitation-sharing": "node --no-warnings --experimental-strip-types --test tests/invitation-sharing.test.mjs",
     "test:messages": "node --no-warnings --experimental-strip-types --test tests/messages.test.mjs",
+    "test:release": "node --no-warnings --experimental-strip-types --test tests/release-preparation.test.mjs",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "node scripts/db-migrate-safe.mjs",
     "db:seed:pricing": "node scripts/seed-pricing.mjs",
     "auth:bootstrap-admin": "node scripts/bootstrap-admin.mjs"
   },

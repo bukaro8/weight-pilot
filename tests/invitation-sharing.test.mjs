@@ -90,5 +90,7 @@ test("admin creation stays in the admin workspace and member history is owner-sc
   assert.equal(memberUi.includes('useState<InvitationTabStatus>("ACTIVE")'), true);
   assert.equal(adminUi.includes('status !== "REVOKED"'), true);
   assert.equal(memberUi.includes('status !== "REVOKED"'), true);
-  assert.match(header, /session\?\.user\.role === "ADMIN"/u);
+  assert.match(header, /headerNavigationKind\(isPending, session\?\.user\.role\)/u);
+  const navigationPolicy = await readFile(new URL("../src/features/navigation/visibility.ts", import.meta.url), "utf8");
+  assert.match(navigationPolicy, /role === "ADMIN" \? "admin"/u);
 });

@@ -32,7 +32,7 @@ The production image uses Next.js standalone output and runs as an unprivileged 
    cp .env.example .env
    ```
 
-2. Replace every placeholder secret. `DATABASE_URL` must use `db` as its host and must match the PostgreSQL user, password, and database values. Generate `BETTER_AUTH_SECRET` from at least 32 cryptographically random bytes. Set `BETTER_AUTH_URL` to the public HTTPS origin exposed by your tunnel or reverse proxy, and configure Resend with a verified `EMAIL_FROM` sender.
+2. Replace every placeholder secret. `DATABASE_URL` must use `db` as its host and must match the PostgreSQL user, password, and database values. Generate `BETTER_AUTH_SECRET` from at least 32 cryptographically random bytes. For production set both `BETTER_AUTH_URL=https://weightpilot.uk` and `PUBLIC_APP_URL=https://weightpilot.uk`; keep local development on `http://localhost:3000` with a blank `PUBLIC_APP_URL`. Configure Resend with a verified `EMAIL_FROM` sender.
 
 3. Build the images and start PostgreSQL:
 
@@ -83,13 +83,13 @@ docker compose --profile tools run --rm bootstrap-admin
 unset ADMIN_EMAIL ADMIN_NAME ADMIN_PASSWORD ADMIN_PREFERRED_LANGUAGE
 ```
 
-The command fails without changing data if an administrator or the requested email already exists. The administrator is created unverified; start the application and attempt to sign in once to receive the mandatory verification email. After verification, sign in normally. Never store the administrator password in the long-lived deployment `.env`, shell history, source control or Compose files.
+The command is repeat-safe: if an administrator already exists, it succeeds without changing any account. Otherwise it creates the administrator unverified; start the application and attempt to sign in once to receive the mandatory verification email. After verification, sign in normally. Never store the administrator password in the long-lived deployment `.env`, shell history, source control or Compose files.
 
 For a non-Docker local PostgreSQL deployment, load the same temporary variables alongside `DATABASE_URL` and run `npm run auth:bootstrap-admin`.
 
 ### Invitations and registration
 
-Public Better Auth sign-up remains disabled. The active, verified administrator creates and shares single-use invitations from **Admin → Invitations**. Each invitation expires seven days after creation and may be revoked until it is used. Members can see the status of invitations they created before this policy change, but cannot create or share new ones. Redeeming an invitation creates a `USER` account and sends the mandatory email-verification message; invitations never grant administrator access.
+Public Better Auth sign-up remains disabled. Any active, verified account can create and share its own single-use invitations from **My Invitations** or, for administrators, **Admin → Invitations**. Each invitation expires seven days after creation and may be revoked until it is used. Members can only see and manage invitations they created; administrators can oversee all records. Redeeming an invitation creates a `USER` account and sends the mandatory email-verification message; invitations never grant administrator access.
 
 An inactive member uses **Reactivate account** with a new invitation and their existing credentials. WeightPilot restores the original account, preserves its history, and revokes prior sessions. No separate administrator approval is required.
 
@@ -147,7 +147,7 @@ Each active, verified member can start one persistent text-only conversation fro
 
 New-message emails use the existing `RESEND_API_KEY` and `EMAIL_FROM` settings and the recipient's saved language. Notifications contain only a generic alert and a sign-in-required link—never message text or questionnaire information. Delivery is best-effort if Resend is unavailable. No new environment variables or services are required. Apply the new `drizzle/` migration before restarting the app; for Docker, rebuild the app image and run `docker compose run --rm migrate` before `docker compose up -d app`.
 
-For reliable report delivery status, create a Resend webhook pointing to `https://your-public-origin.example/api/webhooks/resend`, subscribe to delivered, failed, bounced, suppressed and complained email events, and set its signing secret as `RESEND_WEBHOOK_SECRET`. WeightPilot records API acceptance separately and changes a review to `COMPLETED` only after a valid signed `email.delivered` event. Ensure the tunnel or reverse proxy forwards this HTTPS path directly to the application.
+For reliable report delivery status, create a Resend webhook pointing to `https://weightpilot.uk/api/webhooks/resend`, subscribe to delivered, failed, bounced, suppressed and complained email events, and set its signing secret as `RESEND_WEBHOOK_SECRET`. WeightPilot records API acceptance separately and changes a review to `COMPLETED` only after a valid signed `email.delivered` event. Ensure the tunnel or reverse proxy forwards this HTTPS path directly to the application.
 
 ### Personalised guidance reports
 
@@ -161,18 +161,39 @@ Sessions are stored in PostgreSQL for seven days, refreshed daily, revoked after
 
 ### Updating
 
-Create a database backup first, then fetch the new source and run:
+Select the intended release revision in Coolify, then run from its Compose project directory. Back up the live database first; the backup is separate from the persistent Docker volume:
 
 ```bash
-docker compose build
-docker compose up -d db
-docker compose run --rm migrate
-docker compose run --rm seed-pricing
-docker compose up -d app
-docker image prune -f
+mkdir -p backups
+backup_file="backups/weightpilot-pre-release-$(date +%Y%m%d-%H%M%S).dump"
+docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$backup_file"
+pg_restore --list "$backup_file" > /dev/null
 ```
 
-Review `docker compose ps` and `docker compose logs --tail=100 app` after the update. Roll back by checking out the previous application revision and rebuilding; restore the database only when the migration is not backward-compatible.
+Securely copy the archive off-host. Build the application and one-off tools, apply pending migrations, bootstrap only if production has no administrator, and deploy the app last:
+
+```bash
+docker compose build app migrate bootstrap-admin
+docker compose run --rm migrate
+# If the admin count is zero, run the temporary-credential bootstrap below.
+docker compose up -d --no-deps app
+docker compose ps
+```
+
+Check whether bootstrap is necessary without exposing account details, then conditionally run it between migrations and deployment:
+
+```bash
+admin_count="$(printf '%s\n' 'SELECT count(*) FROM "user" WHERE role = $$ADMIN$$;' | docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At')"
+if [ "$admin_count" -eq 0 ]; then
+  set -a
+  . ./.env.admin
+  set +a
+  docker compose --profile tools run --rm bootstrap-admin
+  unset ADMIN_EMAIL ADMIN_NAME ADMIN_PASSWORD ADMIN_PREFERRED_LANGUAGE
+fi
+```
+
+The bootstrap is repeat-safe and never overwrites an administrator. Never keep credentials in the long-lived `.env`. Review `docker compose logs --tail=100 app` after deploy. Do not run `docker compose down -v`, reset the database, or prune volumes. A code rollback does not automatically roll back database migrations.
 
 ## Database migrations
 
@@ -182,11 +203,13 @@ Generate migration files after an intentional schema change:
 npm run db:generate
 ```
 
-Commit the generated `drizzle/` files. Apply committed migrations independently of application startup with:
+Commit the generated `drizzle/` files. Apply committed migrations explicitly and independently of application startup with:
 
 ```bash
 docker compose run --rm migrate
 ```
+
+`npm run db:migrate` performs a preflight before invoking `drizzle-kit migrate`. The current committed journal contains migrations `0000`–`0010`, including the private-messaging migration `0009_neat_emma_frost.sql` and report-cost migration `0010_high_freak.sql`; the database journal determines which ones are actually pending. The preflight stops before changes if migration `0001_wet_the_order.sql` is pending while the old `profiles` table contains records, because that historical migration drops the table. Back up and inspect those records; if they must be retained, archive them deliberately and verify the archive before rerunning the migration. No production journal has been inspected from this workspace, so production's exact pending set remains an on-host verification item.
 
 ## Database backup and restore
 
