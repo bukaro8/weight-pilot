@@ -14,6 +14,7 @@ const adminLinks = [
   ["/admin", "dashboard", BarChart3],
   ["/admin/users", "users", Users],
   ["/admin/questionnaires", "reviews", ClipboardCheck],
+  ["/admin/treatment-requests", "treatmentRequests", ClipboardCheck],
   ["/admin/messages", "messages", MessageCircle],
   ["/admin/invitations", "invitations", TicketCheck],
   ["/admin/pricing", "pricing", PoundSterling],

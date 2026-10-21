@@ -8,6 +8,7 @@ import {Link} from "@/i18n/navigation";
 
 export function MemberReportReader({emailHtml, assessmentReference, availableAt, locale}: {emailHtml: string; assessmentReference: string; availableAt: string; locale: "en" | "es"}) {
   const t = useTranslations("memberArea.reports");
+  const tt = useTranslations("treatments");
   const [height, setHeight] = useState(900);
   const date = new Intl.DateTimeFormat(locale, {dateStyle: "long"}).format(new Date(availableAt));
 
@@ -29,6 +30,8 @@ export function MemberReportReader({emailHtml, assessmentReference, availableAt,
         <div className="min-w-0"><h2 id="question-title" className="font-display text-2xl font-semibold text-primary-dark">{t("questionAbout")}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-muted">{t("questionAboutBody")}</p></div>
         <Link href="/messages" className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-white shadow-[0_8px_24px_rgba(30,58,95,0.16)] transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:mt-0 sm:w-auto sm:shrink-0"><MessageCircle aria-hidden="true" size={18}/>{t("openMessages")}</Link>
       </section>
+
+      <section className="rounded-[1.5rem] border border-primary/10 bg-surface p-5 sm:p-6"><h2 className="font-display text-2xl text-primary-dark">{tt("dashboardNextTitle")}</h2><p className="mt-2 leading-6 text-muted">{tt("dashboardNextBody")}</p><Link href="/treatments" className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-primary px-5 font-semibold text-white hover:bg-primary-hover sm:w-auto">{tt("viewTreatments")}</Link></section>
 
       <section aria-label={t("contentTitle")} className="overflow-hidden rounded-[1.5rem] border border-border bg-surface shadow-[0_12px_38px_rgba(20,42,71,0.07)]">
         <iframe

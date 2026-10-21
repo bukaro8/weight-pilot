@@ -11,7 +11,7 @@ import {cn} from "@/lib/utils";
 import {LanguageToggle} from "./language-toggle";
 import {headerNavigationKind} from "@/features/navigation/visibility";
 
-const memberLinks = [["/dashboard", "dashboard"], ["/consultations", "consultations"], ["/reports", "reports"], ["/invitations", "invitations"], ["/messages", "messages"]] as const;
+const memberLinks = [["/dashboard", "dashboard"], ["/consultations", "consultations"], ["/reports", "reports"], ["/treatments", "treatments"], ["/requests", "requests"], ["/invitations", "invitations"], ["/messages", "messages"]] as const;
 const adminLinks = [["/", "home"], ["/admin", "admin"]] as const;
 const publicLinks = [["/", "home"]] as const;
 
@@ -21,10 +21,19 @@ export function SiteHeader() {
   const {data: session, isPending} = authClient.useSession();
   const [open, setOpen] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [catalogueEligible, setCatalogueEligible] = useState(false);
   const navigationKind = headerNavigationKind(isPending, session?.user.role);
-  const links = navigationKind === "admin" ? adminLinks : navigationKind === "member" ? memberLinks : publicLinks;
+  const links = navigationKind === "admin" ? adminLinks : navigationKind === "member" ? memberLinks.filter(([href]) => catalogueEligible || (href !== "/treatments" && href !== "/requests")) : publicLinks;
   const homeHref = navigationKind === "member" ? "/dashboard" : navigationKind === "admin" ? "/admin" : "/";
   const homeLabel = navigationKind === "member" ? t("dashboard") : navigationKind === "admin" ? t("admin") : t("home");
+
+  useEffect(() => {
+    let active = true;
+    if (!isPending && session?.user.role === "USER") {
+      fetch("/api/treatments/eligibility", {cache: "no-store"}).then((response) => response.ok ? response.json() : null).then((data: {eligible?: boolean} | null) => {if (active) setCatalogueEligible(Boolean(data?.eligible));}).catch(() => {});
+    }
+    return () => {active = false;};
+  }, [isPending, session?.user.role, pathname]);
 
   useEffect(() => {
     let active = true;
@@ -57,16 +66,16 @@ export function SiteHeader() {
     <header className="sticky top-0 z-40 border-b border-primary/10 bg-background/92 backdrop-blur-xl supports-[backdrop-filter]:bg-background/82">
       <div className="mx-auto flex h-[4.5rem] max-w-7xl items-center justify-between gap-1.5 px-3 min-[360px]:gap-3 min-[360px]:px-4 sm:px-6 lg:h-20 lg:px-10">
         <Link href={homeHref} aria-label={homeLabel} className="inline-flex min-h-11 shrink-0 items-center rounded-md"><BrandLogo priority className="w-[112px] min-[360px]:w-[132px] sm:w-[148px] lg:w-[164px]"/></Link>
-        <nav className="hidden h-full items-center gap-1 lg:flex" aria-label={t("primaryNavigation")}>
+        <nav className="hidden h-full items-center gap-1 xl:flex" aria-label={t("primaryNavigation")}>
           {links.map(([href, key]) => <Link key={key} href={href} aria-current={isActive(href) ? "page" : undefined} aria-label={href === "/messages" && memberUnread > 0 ? t("unreadMessages", {count: memberUnread}) : undefined} className={cn("relative inline-flex h-full items-center gap-2 px-3 text-sm font-medium text-muted transition-colors duration-200 after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:origin-center after:scale-x-0 after:rounded-full after:bg-accent-strong after:transition-transform hover:text-primary", isActive(href) && "text-primary after:scale-x-100")}>{t(key)}{href === "/messages" && memberUnread > 0 ? <span aria-hidden="true" className="inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-white">{memberUnread > 99 ? "99+" : memberUnread}</span> : null}</Link>)}
         </nav>
-        <div className="hidden items-center gap-2.5 lg:flex"><LanguageToggle/><AccountAction/></div>
-        <div className="flex shrink-0 items-center gap-1.5 lg:hidden">
+        <div className="hidden items-center gap-2.5 xl:flex"><LanguageToggle/><AccountAction/></div>
+        <div className="flex shrink-0 items-center gap-1.5 xl:hidden">
           <LanguageToggle/>
           <button type="button" className="flex size-11 items-center justify-center rounded-full border border-primary/15 bg-surface text-primary shadow-sm transition-[color,background-color,border-color] duration-200 hover:border-primary/25 hover:bg-mist-blue" onClick={() => setOpen(!open)} aria-label={open ? t("closeMenu") : t("menu")} aria-expanded={open} aria-controls="mobile-navigation">{open ? <X aria-hidden="true" size={21}/> : <Menu aria-hidden="true" size={21}/>}</button>
         </div>
       </div>
-      <div id="mobile-navigation" className={cn("absolute inset-x-0 top-full origin-top border-b border-primary/10 bg-surface px-4 shadow-[0_18px_40px_rgba(20,42,71,0.12)] transition-[opacity,transform,visibility] duration-200 lg:hidden", open ? "visible translate-y-0 opacity-100" : "invisible -translate-y-2 opacity-0")} aria-hidden={!open}>
+      <div id="mobile-navigation" className={cn("absolute inset-x-0 top-full max-h-[calc(100dvh-4.5rem)] origin-top overflow-y-auto border-b border-primary/10 bg-surface px-4 shadow-[0_18px_40px_rgba(20,42,71,0.12)] transition-[opacity,transform,visibility] duration-200 xl:hidden", open ? "visible translate-y-0 opacity-100" : "invisible -translate-y-2 opacity-0")} aria-hidden={!open}>
         <nav className="mx-auto flex max-w-xl flex-col py-4" aria-label={t("primaryNavigation")}>
           {links.map(([href,key]) => <Link key={key} href={href} onClick={() => setOpen(false)} tabIndex={open ? 0 : -1} aria-current={isActive(href) ? "page" : undefined} aria-label={href === "/messages" && memberUnread > 0 ? t("unreadMessages", {count: memberUnread}) : undefined} className={cn("flex min-h-12 items-center justify-between rounded-xl px-4 font-medium text-primary transition-colors hover:bg-mist-blue", isActive(href) && "bg-mist-blue")}><span>{t(key)}</span><span className="flex items-center gap-3">{href === "/messages" && memberUnread > 0 ? <span aria-hidden="true" className="inline-flex min-h-6 min-w-6 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-white">{memberUnread > 99 ? "99+" : memberUnread}</span> : null}<span className={cn("size-1.5 rounded-full bg-accent-strong opacity-0", isActive(href) && "opacity-100")}/></span></Link>)}
           <div className="mt-3 border-t pt-4"><AccountAction tabIndex={open ? 0 : -1} onNavigate={() => setOpen(false)} className="w-full"/></div>

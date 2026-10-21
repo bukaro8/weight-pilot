@@ -106,6 +106,13 @@
       "when": 1792608182272,
       "tag": "0014_seed_missing_reference_prices",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792620318885,
+      "tag": "0015_black_king_bedlam",
+      "breakpoints": true
     }
   ]
 }

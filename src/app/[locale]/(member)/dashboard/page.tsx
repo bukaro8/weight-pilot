@@ -13,7 +13,7 @@ export default async function MemberDashboardPage({params}: {params: Promise<{lo
   setRequestLocale(locale);
   const member = await requireMember(locale, "/dashboard");
   if (member.role === "ADMIN") redirect({href: "/admin", locale});
-  const [data, t] = await Promise.all([getMemberDashboardOverview(member.id), getTranslations("memberArea.dashboard")]);
+  const [data, t, tt] = await Promise.all([getMemberDashboardOverview(member.id), getTranslations("memberArea.dashboard"), getTranslations("treatments")]);
   const date = (value: string | null) => value ? new Intl.DateTimeFormat(locale, {dateStyle: "medium"}).format(new Date(value)) : null;
   const assessmentHref = data.assessmentStatus === "SUBMITTED" ? "/consultations/results" : "/consultations";
   const assessmentAction = data.assessmentStatus === "SUBMITTED" ? t("viewResults") : t("continueAssessment");
@@ -44,6 +44,8 @@ export default async function MemberDashboardPage({params}: {params: Promise<{lo
         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-mist-blue text-primary"><FileText aria-hidden="true" size={19}/></div>
         <div className="min-w-0"><h2 className="font-display text-xl font-semibold text-primary-dark">{t(reportState === "REQUESTED" ? "requestedTitle" : "preparingTitle")}</h2><p className="mt-1 text-sm leading-6 text-muted">{t(reportState === "REQUESTED" ? "requestedBody" : "preparingBody")}</p></div>
       </section> : null}
+
+      {data.latestReport ? <section className="rounded-[1.5rem] border border-primary/10 bg-surface p-5 sm:p-7"><h2 className="font-display text-2xl text-primary-dark">{tt("dashboardNextTitle")}</h2><p className="mt-2 max-w-2xl leading-6 text-muted">{tt("dashboardNextBody")}</p><div className="mt-5 flex flex-col gap-3 sm:flex-row"><Link href="/treatments" className="inline-flex min-h-12 items-center justify-center rounded-full bg-primary px-6 font-semibold text-white hover:bg-primary-hover">{tt("viewTreatments")}</Link><Link href="/requests" className="inline-flex min-h-12 items-center justify-center rounded-full border border-primary/20 px-6 font-semibold text-primary hover:bg-mist-blue">{tt("myRequests")}</Link></div></section> : null}
 
       <section aria-label={t("quickLinks")} className="grid gap-4 md:grid-cols-2">
         <OverviewCard icon={<ClipboardList aria-hidden="true" size={21}/>} title={t("assessmentTitle")} value={t(`assessment.${data.assessmentStatus}`)} detail={data.assessmentUpdatedAt ? t("assessmentUpdated", {date: date(data.assessmentUpdatedAt) ?? ""}) : undefined} href={assessmentHref} action={assessmentAction}/>

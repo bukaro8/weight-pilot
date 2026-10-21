@@ -352,9 +352,8 @@ test("report comparison migrations add snapshot and opt-in fields without touchi
   const journal = JSON.parse(await readFile(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8"));
   assert.match(snapshotMigration, /ADD COLUMN "savings_comparison" jsonb/u);
   assert.match(enabledMigration, /ADD COLUMN "savings_comparison_enabled" boolean DEFAULT false NOT NULL/u);
-  assert.equal(journal.entries.at(-3).tag, "0012_fuzzy_jigsaw");
-  assert.equal(journal.entries.at(-2).tag, "0013_fat_storm");
-  assert.equal(journal.entries.at(-1).tag, "0014_seed_missing_reference_prices");
+  const tags = journal.entries.map((entry) => entry.tag);
+  assert.deepEqual(tags.slice(12, 15), ["0012_fuzzy_jigsaw", "0013_fat_storm", "0014_seed_missing_reference_prices"]);
   assert.doesNotMatch(snapshotMigration + enabledMigration, /DROP TABLE|TRUNCATE|DELETE FROM|UPDATE "consultation_report"/iu);
 });
 

@@ -30,6 +30,7 @@ export const messageSenderRole = pgEnum("message_sender_role", ["USER", "ADMIN"]
 export const sexAssignedAtBirth = pgEnum("sex_assigned_at_birth", ["FEMALE", "MALE", "INTERSEX", "PREFER_NOT_TO_SAY"]);
 export const referenceTreatment = pgEnum("reference_treatment", ["SEMAGLUTIDE", "TIRZEPATIDE"]);
 export const referenceDeliveryMethod = pgEnum("reference_delivery_method", ["STANDARD_NEXT_DAY", "GUARANTEED_NEXT_DAY"]);
+export const treatmentRequestStatus = pgEnum("treatment_request_status", ["SUBMITTED", "UNDER_REVIEW", "APPROVED_FOR_NEXT_STEPS", "DECLINED", "CANCELLED"]);
 
 export const user = pgTable(
   "user",
@@ -313,6 +314,42 @@ export const treatmentReferencePrice = pgTable(
   ],
 );
 
+export const treatmentAccessRequest = pgTable("treatment_access_request", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  memberId: uuid("member_id").notNull().references(() => user.id, {onDelete: "cascade"}),
+  reportId: uuid("report_id").references(() => consultationReport.id, {onDelete: "set null"}),
+  clientRequestId: uuid("client_request_id").notNull(),
+  treatment: referenceTreatment("treatment").notNull(),
+  fullName: text("full_name").notNull(),
+  address: text("address").notNull(),
+  postcode: text("postcode").notNull(),
+  telephone: text("telephone").notNull(),
+  message: text("message"),
+  language: preferredLanguage("language").notNull(),
+  status: treatmentRequestStatus("status").notNull().default("SUBMITTED"),
+  internalNote: text("internal_note"),
+  declineReason: text("decline_reason"),
+  createdAt: timestamp("created_at", {withTimezone: true}).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", {withTimezone: true}).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("treatment_access_request_member_client_uidx").on(table.memberId, table.clientRequestId),
+  index("treatment_access_request_member_date_idx").on(table.memberId, table.createdAt),
+  index("treatment_access_request_status_date_idx").on(table.status, table.createdAt),
+  check("treatment_access_request_name_check", sql`char_length(trim(${table.fullName})) between 2 and 160`),
+  check("treatment_access_request_address_check", sql`char_length(trim(${table.address})) between 5 and 500`),
+  check("treatment_access_request_postcode_check", sql`char_length(trim(${table.postcode})) between 3 and 30`),
+  check("treatment_access_request_telephone_check", sql`char_length(trim(${table.telephone})) between 7 and 30`),
+  check("treatment_access_request_message_check", sql`${table.message} is null or char_length(${table.message}) <= 1000`),
+]);
+
+export const treatmentRequestStatusEvent = pgTable("treatment_request_status_event", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  requestId: uuid("request_id").notNull().references(() => treatmentAccessRequest.id, {onDelete: "cascade"}),
+  status: treatmentRequestStatus("status").notNull(),
+  changedByUserId: uuid("changed_by_user_id").references(() => user.id, {onDelete: "set null"}),
+  createdAt: timestamp("created_at", {withTimezone: true}).notNull().defaultNow(),
+}, (table) => [index("treatment_request_status_event_request_idx").on(table.requestId, table.createdAt)]);
+
 export const deliveryReferencePrice = pgTable(
   "delivery_reference_price",
   {
@@ -396,6 +433,7 @@ export const userRelations = relations(user, ({many}) => ({
   reportDeliveryAttempts: many(reportDeliveryAttempt),
   messageConversations: many(messageConversation),
   privateMessages: many(privateMessage),
+  treatmentRequests: many(treatmentAccessRequest),
 }));
 
 export const messageConversationRelations = relations(messageConversation, ({one, many}) => ({
