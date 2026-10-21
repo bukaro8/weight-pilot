@@ -7,6 +7,7 @@ import {getDb} from "@/db";
 import {invitation, questionnaire, questionnaireReviewRequest, referral, session, user} from "@/db/schema";
 import {buildAdminDashboardData} from "@/features/admin/analytics";
 import type {AdminDashboardData, AdminReviewSummary, AdminUserDetail, AdminUserDirectoryEntry} from "@/features/admin/types";
+import {getInvitationStatus} from "@/features/invitations/server";
 
 export async function listAdminReviewSummaries(): Promise<AdminReviewSummary[]> {
   const records = await getDb().select({
@@ -79,12 +80,40 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
 }
 
 export async function getAdminUserDetail(id: string): Promise<AdminUserDetail | null> {
-  const [entry, [sessions], [questionnaires], [invitations]] = await Promise.all([
+  const redeemer = alias(user, "profile_invitation_redeemer");
+  const [entry, [sessions], [questionnaires], createdInvitations] = await Promise.all([
     listAdminUsers().then((users) => users.find((candidate) => candidate.id === id) ?? null),
     getDb().select({count: count()}).from(session).where(and(eq(session.userId, id), gt(session.expiresAt, new Date()))),
     getDb().select({count: count()}).from(questionnaire).where(eq(questionnaire.userId, id)),
-    getDb().select({count: count()}).from(invitation).where(eq(invitation.creatorId, id)),
+    getDb().select({
+      id: invitation.id,
+      createdAt: invitation.createdAt,
+      expiresAt: invitation.expiresAt,
+      redeemedAt: invitation.redeemedAt,
+      revokedAt: invitation.revokedAt,
+      redeemerName: redeemer.name,
+      redeemerEmail: redeemer.email,
+    }).from(invitation)
+      .leftJoin(redeemer, eq(invitation.redeemedByUserId, redeemer.id))
+      .where(eq(invitation.creatorId, id))
+      .orderBy(desc(invitation.createdAt)),
   ]);
   if (!entry) return null;
-  return {...entry, activeSessionCount: sessions.count, questionnaireCount: questionnaires.count, invitationCount: invitations.count};
+  const created = createdInvitations.map((record) => ({
+    id: record.id,
+    createdAt: record.createdAt.toISOString(),
+    expiresAt: record.expiresAt.toISOString(),
+    redeemedAt: record.redeemedAt?.toISOString() ?? null,
+    revokedAt: record.revokedAt?.toISOString() ?? null,
+    status: getInvitationStatus(record),
+    redeemer: record.redeemerName && record.redeemerEmail ? {name: record.redeemerName, email: record.redeemerEmail} : null,
+  }));
+  return {
+    ...entry,
+    activeSessionCount: sessions.count,
+    questionnaireCount: questionnaires.count,
+    invitationCount: created.length,
+    usedInvitationCount: created.filter((item) => item.redeemedAt !== null).length,
+    createdInvitations: created,
+  };
 }

@@ -50,3 +50,11 @@ export async function enforceInvitationRedemptionLimit(request: Request, identif
   await consumeRateLimit(`invitation:address:${requestFingerprint(request)}`, 20, 10 * 60 * 1000);
   await consumeRateLimit(`invitation:identity:${identifierHash}`, 10, 10 * 60 * 1000);
 }
+
+export async function enforceInvitationCreationLimit(userId: string) {
+  await consumeRateLimit(`invitation:create:${userId}`, 10, 60 * 60 * 1000);
+}
+
+export async function enforceInvitationEmailLimit(userId: string) {
+  await consumeRateLimit(`invitation:email:${userId}`, 10, 10 * 60 * 1000);
+}

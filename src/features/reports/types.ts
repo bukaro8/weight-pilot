@@ -3,11 +3,17 @@ import type {QuestionnaireData} from "@/features/questionnaire/types";
 
 export type ReportLanguage = "en" | "es";
 export type ReportSendStatus = "DRAFT" | "SENDING" | "ACCEPTED" | "DELIVERED" | "FAILED";
+export type ReportTreatment = "SEMAGLUTIDE" | "TIRZEPATIDE";
+export type ReportReferenceScenario = {treatment: ReportTreatment; durationMonths: 6 | 12 | 16; deliveryMethod: "STANDARD_NEXT_DAY" | "GUARANTEED_NEXT_DAY"};
+export type ReportReferenceEstimate = ReportReferenceScenario & {treatmentCostPence: number; deliveryCostPence: number; totalCostPence: number; pricingUpdatedAt: string};
+export type ReportPharmacyEstimate = {treatment: ReportTreatment; amountPence: number; periodMonths: number; sourceName: string; sourceUrl: string; asOfDate: string};
 
 export type ReportRecord = {
   id: string;
   language: ReportLanguage;
   content: string;
+  referenceEstimate: ReportReferenceEstimate | null;
+  pharmacyEstimate: ReportPharmacyEstimate | null;
   sendStatus: ReportSendStatus;
   providerMessageId: string | null;
   lastAttemptAt: string | null;
@@ -28,6 +34,9 @@ export type ReportWorkspaceData = {
   emailVerified: boolean;
   questionnaire: QuestionnaireData;
   assessment: AssessmentOutcome;
+  referenceEstimate: ReportReferenceEstimate | null;
+  pharmacyEstimate: ReportPharmacyEstimate | null;
+  messagesUrl: string;
   report: ReportRecord;
   prompt: string;
   previewHtml: string;

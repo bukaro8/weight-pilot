@@ -1,6 +1,6 @@
 # WeightPilot
 
-WeightPilot is a bilingual Next.js application for a private, personalised weight-management information and guidance platform. It is not a clinic, healthcare provider or medical service. Phase 4B.2 includes invitation-only accounts, a short personalised-assessment questionnaire, administrator-managed illustrative reference pricing, and a preliminary educational comparison of semaglutide and tirzepatide. Guidance reports and other business workflows remain placeholders.
+WeightPilot is a bilingual Next.js application for a private, personalised weight-management information and guidance platform. It is not a clinic, healthcare provider or medical service. The application includes invitation-only accounts, a short personalised-assessment questionnaire, administrator-managed illustrative reference pricing, preliminary educational information, private messaging and administrator-reviewed guidance reports.
 
 ## Local development
 
@@ -89,7 +89,7 @@ For a non-Docker local PostgreSQL deployment, load the same temporary variables 
 
 ### Invitations and registration
 
-Public Better Auth sign-up remains disabled. An active, verified member generates a single-use invitation from **Invitations** and shares its code or link. Each invitation expires after seven days and may be revoked until it is used. Redeeming an invitation creates a `USER` account and sends the mandatory email-verification message; invitations never grant administrator access.
+Public Better Auth sign-up remains disabled. The active, verified administrator creates and shares single-use invitations from **Admin → Invitations**. Each invitation expires seven days after creation and may be revoked until it is used. Members can see the status of invitations they created before this policy change, but cannot create or share new ones. Redeeming an invitation creates a `USER` account and sends the mandatory email-verification message; invitations never grant administrator access.
 
 An inactive member uses **Reactivate account** with a new invitation and their existing credentials. WeightPilot restores the original account, preserves its history, and revokes prior sessions. No separate administrator approval is required.
 
@@ -139,7 +139,23 @@ For direct local Docker access, use an HTTP `BETTER_AUTH_URL` such as `http://lo
 
 Email verification, password reset and administrator-reviewed guidance reports use Resend. Set `RESEND_API_KEY` and a verified `EMAIL_FROM` sender in the runtime environment. Builds and containers can start without these values, but emails will not be delivered until they are configured. Email copy follows the selected or preferred language (`en` or `es`). Password-recovery responses intentionally do not reveal whether an email address exists.
 
+The administrator can create and share their own invitations from the Invitations page by email, WhatsApp, SMS or copied link. Invitation emails also use `RESEND_API_KEY` and `EMAIL_FROM`. Shared registration links use `PUBLIC_APP_URL` when set, otherwise `BETTER_AUTH_URL`. The chosen URL must be a public HTTPS origin; localhost is not accepted for sharing. `PUBLIC_APP_URL` is useful when local authentication uses HTTP but links should lead to the public deployment. Resend acceptance confirms submission for delivery, not arrival. A failed email attempt leaves the same invitation available until it is used, revoked or expires.
+
+### Private member messages
+
+Each active, verified member can start one persistent text-only conversation from **Messages**, without completing a questionnaire. Members can read and send messages only in their own conversation; the active, verified administrator can manage conversations from **Administration → Messages**. Message endpoints re-check account status, email verification, role and ownership in PostgreSQL, enforce a 4,000-character limit, and apply per-account send limits. Unread badges refresh periodically; message history is polled every five seconds while a conversation is open.
+
+New-message emails use the existing `RESEND_API_KEY` and `EMAIL_FROM` settings and the recipient's saved language. Notifications contain only a generic alert and a sign-in-required link—never message text or questionnaire information. Delivery is best-effort if Resend is unavailable. No new environment variables or services are required. Apply the new `drizzle/` migration before restarting the app; for Docker, rebuild the app image and run `docker compose run --rm migrate` before `docker compose up -d app`.
+
 For reliable report delivery status, create a Resend webhook pointing to `https://your-public-origin.example/api/webhooks/resend`, subscribe to delivered, failed, bounced, suppressed and complained email events, and set its signing secret as `RESEND_WEBHOOK_SECRET`. WeightPilot records API acceptance separately and changes a review to `COMPLETED` only after a valid signed `email.delivered` event. Ensure the tunnel or reverse proxy forwards this HTTPS path directly to the application.
+
+### Personalised guidance reports
+
+Members see their preliminary assessment immediately and may separately request a personalised report. Preliminary results never include prices. The administrator review workspace shows the submitted questionnaire and a privacy-safe prompt for optional external research; no AI API is called. Drafts autosave in PostgreSQL, and an administrator must review the text and explicitly confirm before sending to the verified account email. Members can see the request status on their assessment results page.
+
+Report emails include a concise assessment summary, reviewed guidance and a secure link to the member's private WeightPilot conversation. The administrator may optionally include the existing 6, 12 or 16-month illustrative reference-price scenario. A pharmacy comparison is optional and requires the administrator to supply the same treatment, amount, period, UK pharmacy/source name, HTTPS source and date checked. WeightPilot does not verify or invent pharmacy prices; the admin must check the linked source. These estimates are informational only, not quotes or offers to sell.
+
+No new environment variables are required. Keep `PUBLIC_APP_URL` set to the public HTTPS origin so report emails can link to the correct private message page. Resend delivery still requires `RESEND_API_KEY`, `EMAIL_FROM`, and a configured webhook secret for confirmed delivery status. Deploy the application code after applying the additive Drizzle migration; do not run migrations during application startup.
 
 Sessions are stored in PostgreSQL for seven days, refreshed daily, revoked after a password reset, and issued in secure, HTTP-only cookies in production. Private routes re-check the user record server-side, so inactive or unverified accounts are denied even if an older session cookie still exists.
 

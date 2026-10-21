@@ -10,15 +10,36 @@ import {serializeQuestionnaire} from "@/features/questionnaire/server";
 import {normalizeReportContent} from "@/features/reports/content";
 import {deliverGuidanceReport, renderGuidanceReportEmail, sendReviewRequestNotification} from "@/features/reports/email";
 import {generateAiResearchPrompt} from "@/features/reports/prompt";
+import {calculateReferenceCost} from "@/features/pricing/calculations";
+import {getPricingBook} from "@/features/pricing/server";
+import {publicInvitationOrigin} from "@/features/invitations/sharing";
 import type {ReportLanguage, ReportRecord, ReportWorkspaceData} from "@/features/reports/types";
 
+const conditionEmailLabels: Record<string, Record<ReportLanguage, string>> = {
+  DIABETES: {en: "Diabetes", es: "Diabetes"}, HIGH_BLOOD_PRESSURE: {en: "High blood pressure", es: "Tensión arterial alta"},
+  HEART_CONDITIONS: {en: "Heart conditions", es: "Afecciones cardíacas"}, KIDNEY_OR_LIVER_DISEASE: {en: "Kidney or liver disease", es: "Enfermedad renal o hepática"},
+  PANCREATITIS_OR_GALLBLADDER: {en: "Pancreatitis or gallbladder problems", es: "Pancreatitis o problemas de vesícula"}, SERIOUS_DIGESTIVE_PROBLEMS: {en: "Serious digestive problems", es: "Problemas digestivos graves"},
+  DIABETIC_EYE_DISEASE: {en: "Diabetic eye disease", es: "Enfermedad ocular diabética"}, PREGNANCY: {en: "Pregnancy, breastfeeding or pregnancy plans", es: "Embarazo, lactancia o planes de embarazo"},
+  OTHER: {en: "Other health conditions", es: "Otras afecciones de salud"}, NOT_SURE: {en: "Not sure", es: "No está claro"},
+};
+
+function buildEmailSummary(questionnaireData: ReturnType<typeof serializeQuestionnaire>, bmi: number | null, targetLossPercentage: number | null, language: ReportLanguage) {
+  return {
+    currentWeightKg: questionnaireData.currentWeightKg, targetWeightKg: questionnaireData.targetWeightKg, bmi, targetLossPercentage,
+    healthConsiderations: questionnaireData.healthConditions.filter((condition) => condition !== "NONE").map((condition) => conditionEmailLabels[condition]?.[language] ?? condition),
+    medicationStatus: questionnaireData.noMedication ? "NONE_REPORTED" as const : questionnaireData.medications?.trim() ? "REPORTED" as const : "UNCLEAR" as const,
+  };
+}
+
 export class ReportError extends Error {
-  constructor(public readonly code: "REPORT_NOT_FOUND" | "REPORT_LOCKED" | "REPORT_EMPTY" | "REPORT_ALREADY_SENT" | "RECIPIENT_UNVERIFIED" | "REPORT_SEND_FAILED") { super(code); }
+  constructor(public readonly code: "REPORT_NOT_FOUND" | "REPORT_LOCKED" | "REPORT_EMPTY" | "REPORT_ALREADY_SENT" | "RECIPIENT_UNVERIFIED" | "REPORT_SEND_FAILED" | "REPORT_PUBLIC_URL_NOT_CONFIGURED") { super(code); }
 }
 
 function serializeReport(record: typeof consultationReport.$inferSelect): ReportRecord {
   return {
-    id: record.id, language: record.language, content: record.content, sendStatus: record.sendStatus,
+    id: record.id, language: record.language, content: record.content,
+    referenceEstimate: record.referenceEstimate, pharmacyEstimate: record.pharmacyEstimate,
+    sendStatus: record.sendStatus,
     providerMessageId: record.providerMessageId, lastAttemptAt: record.lastAttemptAt?.toISOString() ?? null,
     acceptedAt: record.acceptedAt?.toISOString() ?? null, deliveredAt: record.deliveredAt?.toISOString() ?? null,
     failedAt: record.failedAt?.toISOString() ?? null, failureCode: record.failureCode,
@@ -56,21 +77,41 @@ export async function getReportWorkspace(reviewRequestId: string): Promise<Repor
     questionnaireData.assessmentOutcome = assessment;
   }
   const report = serializeReport(record.report);
+  const origin = publicInvitationOrigin(process.env.PUBLIC_APP_URL || process.env.BETTER_AUTH_URL);
+  const messagesUrl = origin ? new URL(`/${report.language}/messages`, origin).toString() : "";
+  const emailExtras = {
+    summary: buildEmailSummary(questionnaireData, assessment.bmi, assessment.targetWeightLossPercentage, report.language),
+    referenceEstimate: report.referenceEstimate,
+    pharmacyEstimate: report.pharmacyEstimate,
+    messagesUrl,
+  };
   return {
     reviewRequestId: record.review.id, reviewStatus: record.review.status,
     requestedAt: record.review.requestedAt.toISOString(), memberName: record.memberName,
     memberEmail: record.memberEmail, emailVerified: record.emailVerified,
     questionnaire: questionnaireData, assessment, report,
+    referenceEstimate: report.referenceEstimate, pharmacyEstimate: report.pharmacyEstimate, messagesUrl,
     prompt: generateAiResearchPrompt({questionnaire: questionnaireData, assessment, language: report.language, identityValues: [record.memberName, record.memberEmail]}),
-    previewHtml: renderGuidanceReportEmail({language: report.language, memberName: record.memberName, content: report.content}).html,
+    previewHtml: renderGuidanceReportEmail({language: report.language, memberName: record.memberName, content: report.content, ...emailExtras}).html,
   };
 }
 
-export async function saveReportDraft(adminId: string, reviewRequestId: string, input: {language: ReportLanguage; content: string}) {
+export async function saveReportDraft(adminId: string, reviewRequestId: string, input: {
+  language: ReportLanguage;
+  content: string;
+  referenceScenario: {treatment: "SEMAGLUTIDE" | "TIRZEPATIDE"; durationMonths: 6 | 12 | 16; deliveryMethod: "STANDARD_NEXT_DAY" | "GUARANTEED_NEXT_DAY"} | null;
+  pharmacyEstimate: {treatment: "SEMAGLUTIDE" | "TIRZEPATIDE"; amountPence: number; periodMonths: number; sourceName: string; sourceUrl: string; asOfDate: string} | null;
+}) {
   await ensureReport(reviewRequestId);
   const content = normalizeReportContent(input.content);
+  const pricing = input.referenceScenario ? await getPricingBook() : null;
+  const referenceEstimate = input.referenceScenario && pricing ? {
+    ...calculateReferenceCost(pricing, input.referenceScenario.treatment, input.referenceScenario.deliveryMethod, input.referenceScenario.durationMonths),
+    pricingUpdatedAt: pricing.updatedAt,
+  } : null;
   const [updated] = await getDb().update(consultationReport).set({
-    language: input.language, content, updatedAt: new Date(), updatedByAdminId: adminId,
+    language: input.language, content, referenceEstimate, pharmacyEstimate: input.pharmacyEstimate,
+    updatedAt: new Date(), updatedByAdminId: adminId,
   }).where(and(
     eq(consultationReport.reviewRequestId, reviewRequestId),
     eq(consultationReport.sendStatus, "DRAFT"),
@@ -78,7 +119,7 @@ export async function saveReportDraft(adminId: string, reviewRequestId: string, 
   if (!updated) {
     const [existing] = await getDb().select({status: consultationReport.sendStatus}).from(consultationReport).where(eq(consultationReport.reviewRequestId, reviewRequestId)).limit(1);
     if (existing?.status === "FAILED") {
-      const [retried] = await getDb().update(consultationReport).set({language: input.language, content, sendStatus: "DRAFT", failureCode: null, failedAt: null, updatedAt: new Date(), updatedByAdminId: adminId}).where(and(eq(consultationReport.reviewRequestId, reviewRequestId), eq(consultationReport.sendStatus, "FAILED"))).returning();
+      const [retried] = await getDb().update(consultationReport).set({language: input.language, content, referenceEstimate, pharmacyEstimate: input.pharmacyEstimate, sendStatus: "DRAFT", failureCode: null, failedAt: null, updatedAt: new Date(), updatedByAdminId: adminId}).where(and(eq(consultationReport.reviewRequestId, reviewRequestId), eq(consultationReport.sendStatus, "FAILED"))).returning();
       if (retried) return serializeReport(retried);
     }
     throw new ReportError("REPORT_LOCKED");
@@ -88,8 +129,10 @@ export async function saveReportDraft(adminId: string, reviewRequestId: string, 
 
 export async function sendReport(adminId: string, reviewRequestId: string) {
   const database = getDb();
+  const origin = publicInvitationOrigin(process.env.PUBLIC_APP_URL || process.env.BETTER_AUTH_URL);
+  if (!origin) throw new ReportError("REPORT_PUBLIC_URL_NOT_CONFIGURED");
   const prepared = await database.transaction(async (transaction) => {
-    const [record] = await transaction.select({report: consultationReport, memberName: user.name, memberEmail: user.email, emailVerified: user.emailVerified})
+    const [record] = await transaction.select({report: consultationReport, memberName: user.name, memberEmail: user.email, emailVerified: user.emailVerified, questionnaire})
       .from(consultationReport)
       .innerJoin(questionnaireReviewRequest, eq(consultationReport.reviewRequestId, questionnaireReviewRequest.id))
       .innerJoin(user, eq(questionnaireReviewRequest.requestedByUserId, user.id))
@@ -102,12 +145,19 @@ export async function sendReport(adminId: string, reviewRequestId: string) {
     const [locked] = await transaction.update(consultationReport).set({sendStatus: "SENDING", lastAttemptAt: now, failureCode: null, failedAt: null, updatedAt: now, sentByAdminId: adminId})
       .where(and(eq(consultationReport.id, record.report.id), eq(consultationReport.sendStatus, record.report.sendStatus))).returning();
     if (!locked) throw new ReportError("REPORT_ALREADY_SENT");
-    return {report: locked, memberName: record.memberName, memberEmail: record.memberEmail};
+    return {report: locked, memberName: record.memberName, memberEmail: record.memberEmail, questionnaire: record.questionnaire};
   });
+
+  const messagesUrl = new URL(`/${prepared.report.language}/messages`, origin).toString();
+  const questionnaireData = serializeQuestionnaire(prepared.questionnaire);
+  const assessment = assessmentOutcomeSchema.safeParse(questionnaireData.assessmentOutcome);
+  const outcome = assessment.success ? assessment.data : calculatePreliminaryAssessment(questionnaireData);
 
   const delivery = await deliverGuidanceReport({
     reportId: prepared.report.id, language: prepared.report.language, memberName: prepared.memberName,
     recipient: prepared.memberEmail, content: prepared.report.content,
+    summary: buildEmailSummary(questionnaireData, outcome.bmi, outcome.targetWeightLossPercentage, prepared.report.language),
+    referenceEstimate: prepared.report.referenceEstimate, pharmacyEstimate: prepared.report.pharmacyEstimate, messagesUrl,
   });
   const now = new Date();
   if (!delivery.ok) {

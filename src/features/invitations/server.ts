@@ -28,7 +28,7 @@ function encryptionSecret() {
   return secret;
 }
 
-function statusFor(record: {redeemedAt: Date | null; revokedAt: Date | null; expiresAt: Date}): InvitationStatus {
+export function getInvitationStatus(record: {redeemedAt: Date | null; revokedAt: Date | null; expiresAt: Date}): InvitationStatus {
   if (record.redeemedAt) return "USED";
   if (record.revokedAt) return "REVOKED";
   if (record.expiresAt.getTime() <= Date.now()) return "EXPIRED";
@@ -66,21 +66,28 @@ export async function createInvitation(creatorId: string) {
 }
 
 export async function listMemberInvitations(creatorId: string) {
-  const records = await getDb().select().from(invitation)
+  const records = await getDb().select({
+    id: invitation.id,
+    codeCiphertext: invitation.codeCiphertext,
+    codePreview: invitation.codePreview,
+    createdAt: invitation.createdAt,
+    expiresAt: invitation.expiresAt,
+    redeemedAt: invitation.redeemedAt,
+    revokedAt: invitation.revokedAt,
+    redemptionType: invitation.redemptionType,
+  }).from(invitation)
     .where(eq(invitation.creatorId, creatorId)).orderBy(desc(invitation.createdAt));
-  return Promise.all(records.map(async (record) => {
-    const status = statusFor(record);
-    return {
+  return Promise.all(records.map(async (record) => ({
     id: record.id,
-    code: status === "ACTIVE" ? await decryptCode(record.codeCiphertext) : null,
+    code: getInvitationStatus(record) === "ACTIVE" ? await decryptCode(record.codeCiphertext) : null,
     codePreview: record.codePreview,
     createdAt: record.createdAt.toISOString(),
     expiresAt: record.expiresAt.toISOString(),
     redeemedAt: record.redeemedAt?.toISOString() ?? null,
     revokedAt: record.revokedAt?.toISOString() ?? null,
     redemptionType: record.redemptionType,
-    status,
-  };}));
+    status: getInvitationStatus(record),
+  })));
 }
 
 export async function revokeInvitation(invitationId: string, actor: {id: string; role: "USER" | "ADMIN"}) {
@@ -210,11 +217,13 @@ export async function reactivateWithInvitation(input: InvitationReactivationInpu
   }
 }
 
-export async function listAdminInvitations() {
+export async function listAdminInvitations(administratorId: string) {
   const creator = alias(user, "invitation_creator");
   const redeemer = alias(user, "invitation_redeemer");
   const records = await getDb().select({
     id: invitation.id,
+    creatorId: invitation.creatorId,
+    codeCiphertext: invitation.codeCiphertext,
     codePreview: invitation.codePreview,
     createdAt: invitation.createdAt,
     expiresAt: invitation.expiresAt,
@@ -223,6 +232,7 @@ export async function listAdminInvitations() {
     redemptionType: invitation.redemptionType,
     creatorName: creator.name,
     creatorEmail: creator.email,
+    creatorRole: creator.role,
     redeemerName: redeemer.name,
     redeemerEmail: redeemer.email,
   }).from(invitation)
@@ -230,12 +240,30 @@ export async function listAdminInvitations() {
     .leftJoin(redeemer, eq(invitation.redeemedByUserId, redeemer.id))
     .orderBy(desc(invitation.createdAt));
 
-  return records.map((record) => ({
-    ...record,
+  return Promise.all(records.map(async (record) => ({
+    id: record.id,
+    codePreview: record.codePreview,
+    code: record.creatorId === administratorId && getInvitationStatus(record) === "ACTIVE"
+      ? await decryptCode(record.codeCiphertext) : null,
     createdAt: record.createdAt.toISOString(),
     expiresAt: record.expiresAt.toISOString(),
     redeemedAt: record.redeemedAt?.toISOString() ?? null,
     revokedAt: record.revokedAt?.toISOString() ?? null,
-    status: statusFor(record),
-  }));
+    redemptionType: record.redemptionType,
+    creatorName: record.creatorName,
+    creatorEmail: record.creatorEmail,
+    creatorRole: record.creatorRole,
+    redeemerName: record.redeemerName,
+    redeemerEmail: record.redeemerEmail,
+    status: getInvitationStatus(record),
+  })));
+}
+
+export async function getOwnedShareableInvitation(invitationId: string, creatorId: string) {
+  const [record] = await getDb().select().from(invitation)
+    .where(and(eq(invitation.id, invitationId), eq(invitation.creatorId, creatorId)))
+    .limit(1);
+  if (!record || !invitationIsAvailable(record)) return null;
+  const code = await decryptCode(record.codeCiphertext);
+  return code ? {code} : null;
 }

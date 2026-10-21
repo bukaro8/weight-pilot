@@ -18,5 +18,10 @@ export const invitationReactivationSchema = z.object({
   password: z.string().min(1).max(128),
 });
 
+export const invitationEmailSchema = z.object({
+  email: emailSchema.transform((value) => value.toLowerCase()),
+  language: z.enum(["en", "es"]),
+}).strict();
+
 export type InvitationRegistrationInput = z.infer<typeof invitationRegistrationSchema>;
 export type InvitationReactivationInput = z.infer<typeof invitationReactivationSchema>;

@@ -1,2 +1,2 @@
-// Private messaging domain exports will be added when the feature is implemented.
-export const messagesStatus = "placeholder" as const;
+export {conversationIdSchema, privateMessageSchema} from "./validation";
+export type {PrivateMessageInput} from "./validation";

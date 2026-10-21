@@ -5,6 +5,7 @@ import {useTranslations} from "next-intl";
 import {useCallback, useEffect, useRef, useState, type FormEvent} from "react";
 
 import {Button} from "@/components/ui/button";
+import {AssessmentAnalysisLoading} from "@/components/assessment/assessment-analysis-loading";
 import {calculateBmi, calculateTargetLossPercentage} from "@/features/questionnaire/calculations";
 import type {QuestionnaireData} from "@/features/questionnaire/types";
 import {imperialHeightToCm, imperialWeightToKg, metricHeightToImperial, metricWeightToImperial, type MeasurementSystem} from "@/features/questionnaire/units";
@@ -302,6 +303,5 @@ function ReviewRow({label, value}: {label: string; value: string}) {
 }
 
 function SubmissionLoading() {
-  const t = useTranslations("questionnaire");
-  return <main id="main-content" className="flex flex-1 items-center justify-center px-4 py-16"><div className="text-center"><LoaderCircle className="mx-auto animate-spin text-primary motion-reduce:animate-none" aria-hidden="true" size={32}/><p className="mt-4 font-semibold text-primary-dark" role="status">{t("submitted.loading")}</p></div></main>;
+  return <AssessmentAnalysisLoading/>;
 }

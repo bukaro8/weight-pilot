@@ -28,6 +28,16 @@ export type AdminUserDetail = AdminUserDirectoryEntry & {
   activeSessionCount: number;
   questionnaireCount: number;
   invitationCount: number;
+  usedInvitationCount: number;
+  createdInvitations: Array<{
+    id: string;
+    createdAt: string;
+    expiresAt: string;
+    redeemedAt: string | null;
+    revokedAt: string | null;
+    status: "ACTIVE" | "USED" | "EXPIRED" | "REVOKED";
+    redeemer: {name: string; email: string} | null;
+  }>;
 };
 
 export type AdminActivity = {

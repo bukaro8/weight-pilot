@@ -1,0 +1,21 @@
+{
+  "referenceCostTitle": "Optional reference cost scenario",
+  "referenceCostHelp": "Uses the current administrator-managed WeightPilot reference prices and existing 6, 12 or 16 month projection. This is illustrative, not a pharmacy quote or offer.",
+  "includeReferenceCost": "Include a reference cost estimate",
+  "includePharmacyEstimate": "Include a sourced pharmacy estimate",
+  "pharmacyEstimateHelp": "Enter a UK pharmacy source you have checked. Treatment, amount, period, source name, HTTPS link and date checked are required. This is a comparison, not a verified WeightPilot price.",
+  "treatment": "Treatment",
+  "semaglutide": "Semaglutide",
+  "tirzepatide": "Tirzepatide",
+  "duration": "Projection duration",
+  "months": "months",
+  "delivery": "Delivery assumption",
+  "standardDelivery": "Standard next day",
+  "guaranteedDelivery": "Guaranteed next day",
+  "referenceTotal": "Illustrative reference total: {amount}",
+  "amountGbp": "Amount (£)",
+  "periodMonths": "Estimate period (months)",
+  "pharmacyName": "UK pharmacy / source name",
+  "sourceUrl": "Source URL (HTTPS)",
+  "sourceDate": "Date checked"
+}

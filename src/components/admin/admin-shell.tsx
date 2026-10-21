@@ -1,6 +1,6 @@
 "use client";
 
-import {BarChart3, ClipboardCheck, ExternalLink, Menu, PoundSterling, TicketCheck, Users, X} from "lucide-react";
+import {BarChart3, ClipboardCheck, ExternalLink, Menu, MessageCircle, PoundSterling, TicketCheck, Users, X} from "lucide-react";
 import {useTranslations} from "next-intl";
 import {useEffect, useState} from "react";
 
@@ -14,11 +14,12 @@ const adminLinks = [
   ["/admin", "dashboard", BarChart3],
   ["/admin/users", "users", Users],
   ["/admin/questionnaires", "reviews", ClipboardCheck],
+  ["/admin/messages", "messages", MessageCircle],
   ["/admin/invitations", "invitations", TicketCheck],
   ["/admin/pricing", "pricing", PoundSterling],
 ] as const;
 
-export function AdminShell({administratorName, children}: {administratorName: string; children: React.ReactNode}) {
+export function AdminShell({administratorName, unreadMessages = 0, children}: {administratorName: string; unreadMessages?: number; children: React.ReactNode}) {
   const t = useTranslations("adminNav");
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -29,7 +30,7 @@ export function AdminShell({administratorName, children}: {administratorName: st
   }, []);
   const active = (href: string) => href === "/admin" ? pathname === href : pathname.startsWith(href);
 
-  const navigation = (onNavigate?: () => void) => <nav aria-label={t("navigation")} className="grid gap-1.5">{adminLinks.map(([href, key, Icon]) => <Link key={href} href={href} onClick={onNavigate} aria-current={active(href) ? "page" : undefined} className={cn("flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong", active(href) ? "bg-white text-primary-dark shadow-sm" : "text-white/75 hover:bg-white/10 hover:text-white")}><Icon aria-hidden="true" size={18}/><span>{t(key)}</span></Link>)}</nav>;
+  const navigation = (onNavigate?: () => void) => <nav aria-label={t("navigation")} className="grid gap-1.5">{adminLinks.map(([href, key, Icon]) => <Link key={href} href={href} onClick={onNavigate} aria-current={active(href) ? "page" : undefined} aria-label={key === "messages" && unreadMessages > 0 ? t("unreadMessages", {count: unreadMessages}) : undefined} className={cn("flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong", active(href) ? "bg-white text-primary-dark shadow-sm" : "text-white/75 hover:bg-white/10 hover:text-white")}><Icon aria-hidden="true" size={18}/><span className="flex-1">{t(key)}</span>{key === "messages" && unreadMessages > 0 ? <span aria-hidden="true" className="inline-flex min-h-6 min-w-6 items-center justify-center rounded-full bg-accent px-1.5 text-xs font-bold text-primary-dark">{unreadMessages > 99 ? "99+" : unreadMessages}</span> : null}</Link>)}</nav>;
 
   return <div className="min-h-screen bg-background lg:grid lg:grid-cols-[17rem_minmax(0,1fr)]">
     <aside className="sticky top-0 hidden h-screen flex-col bg-primary-dark px-5 py-6 text-white lg:flex">

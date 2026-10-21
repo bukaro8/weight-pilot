@@ -1,6 +1,6 @@
 "use client";
 
-import {ArrowUpRight, CheckCircle2, ClipboardCheck, ExternalLink, Info, LoaderCircle, Scale, ShieldCheck, Sparkles} from "lucide-react";
+import {ArrowUpRight, CheckCircle2, ClipboardCheck, ExternalLink, Info, LoaderCircle, Scale, ShieldCheck} from "lucide-react";
 import {useTranslations} from "next-intl";
 import {useState} from "react";
 
@@ -63,7 +63,7 @@ export function TreatmentResults({questionnaireId, firstName, outcome, healthCon
       <div className="relative mx-auto max-w-5xl">
         <div className="flex size-11 items-center justify-center rounded-2xl bg-white/10 text-accent"><ClipboardCheck aria-hidden="true" size={22}/></div>
         <p className="mt-5 text-xs font-bold uppercase tracking-[0.18em] text-accent">{t("hero.eyebrow")}</p>
-        <h1 className="mt-3 max-w-3xl font-display text-4xl font-semibold leading-[1.06] tracking-[-0.03em] sm:text-5xl">{t("hero.title", {name: firstName})}</h1>
+        <h1 className="mt-3 max-w-3xl break-words font-display text-4xl font-semibold leading-[1.06] tracking-[-0.03em] sm:text-5xl">{t("hero.title", {name: firstName})}</h1>
         <p className="mt-4 max-w-2xl leading-7 text-white/80">{t("hero.body")}</p>
       </div>
     </section>

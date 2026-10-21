@@ -25,6 +25,7 @@ export const measurementSystem = pgEnum("measurement_system", ["METRIC", "IMPERI
 export const questionnaireReviewStatus = pgEnum("questionnaire_review_status", ["REQUESTED", "IN_REVIEW", "COMPLETED"]);
 export const reportSendStatus = pgEnum("report_send_status", ["DRAFT", "SENDING", "ACCEPTED", "DELIVERED", "FAILED"]);
 export const reportAttemptStatus = pgEnum("report_attempt_status", ["ACCEPTED", "FAILED"]);
+export const messageSenderRole = pgEnum("message_sender_role", ["USER", "ADMIN"]);
 export const sexAssignedAtBirth = pgEnum("sex_assigned_at_birth", ["FEMALE", "MALE", "INTERSEX", "PREFER_NOT_TO_SAY"]);
 export const referenceTreatment = pgEnum("reference_treatment", ["SEMAGLUTIDE", "TIRZEPATIDE"]);
 export const referenceDeliveryMethod = pgEnum("reference_delivery_method", ["STANDARD_NEXT_DAY", "GUARANTEED_NEXT_DAY"]);
@@ -229,6 +230,23 @@ export const consultationReport = pgTable(
       .references(() => questionnaireReviewRequest.id, {onDelete: "cascade"}),
     language: preferredLanguage("language").notNull().default("en"),
     content: text("content").notNull().default(""),
+    referenceEstimate: jsonb("reference_estimate").$type<{
+      treatment: "SEMAGLUTIDE" | "TIRZEPATIDE";
+      durationMonths: 6 | 12 | 16;
+      deliveryMethod: "STANDARD_NEXT_DAY" | "GUARANTEED_NEXT_DAY";
+      treatmentCostPence: number;
+      deliveryCostPence: number;
+      totalCostPence: number;
+      pricingUpdatedAt: string;
+    } | null>(),
+    pharmacyEstimate: jsonb("pharmacy_estimate").$type<{
+      treatment: "SEMAGLUTIDE" | "TIRZEPATIDE";
+      amountPence: number;
+      periodMonths: number;
+      sourceName: string;
+      sourceUrl: string;
+      asOfDate: string;
+    } | null>(),
     sendStatus: reportSendStatus("send_status").notNull().default("DRAFT"),
     providerMessageId: text("provider_message_id").unique(),
     lastAttemptAt: timestamp("last_attempt_at", {withTimezone: true}),
@@ -291,6 +309,36 @@ export const deliveryReferencePrice = pgTable(
   ],
 );
 
+export const messageConversation = pgTable(
+  "message_conversation",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    memberId: uuid("member_id").notNull().unique().references(() => user.id, {onDelete: "cascade"}),
+    createdAt: timestamp("created_at", {withTimezone: true}).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", {withTimezone: true}).notNull().defaultNow(),
+  },
+  (table) => [index("message_conversation_updated_at_idx").on(table.updatedAt)],
+);
+
+export const privateMessage = pgTable(
+  "private_message",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    conversationId: uuid("conversation_id").notNull().references(() => messageConversation.id, {onDelete: "cascade"}),
+    senderId: uuid("sender_id").notNull().references(() => user.id, {onDelete: "cascade"}),
+    senderRole: messageSenderRole("sender_role").notNull(),
+    clientMessageId: uuid("client_message_id").notNull().unique(),
+    body: text("body").notNull(),
+    readAt: timestamp("read_at", {withTimezone: true}),
+    createdAt: timestamp("created_at", {withTimezone: true}).notNull().defaultNow(),
+  },
+  (table) => [
+    index("private_message_conversation_created_idx").on(table.conversationId, table.createdAt),
+    index("private_message_unread_idx").on(table.conversationId, table.readAt, table.senderId),
+    check("private_message_body_length_check", sql`char_length(trim(${table.body})) between 1 and 4000`),
+  ],
+);
+
 export const userRelations = relations(user, ({many}) => ({
   sessions: many(session),
   accounts: many(account),
@@ -304,6 +352,18 @@ export const userRelations = relations(user, ({many}) => ({
   reportDraftUpdates: many(consultationReport, {relationName: "reportUpdatedBy"}),
   reportsSent: many(consultationReport, {relationName: "reportSentBy"}),
   reportDeliveryAttempts: many(reportDeliveryAttempt),
+  messageConversations: many(messageConversation),
+  privateMessages: many(privateMessage),
+}));
+
+export const messageConversationRelations = relations(messageConversation, ({one, many}) => ({
+  member: one(user, {fields: [messageConversation.memberId], references: [user.id]}),
+  messages: many(privateMessage),
+}));
+
+export const privateMessageRelations = relations(privateMessage, ({one}) => ({
+  conversation: one(messageConversation, {fields: [privateMessage.conversationId], references: [messageConversation.id]}),
+  sender: one(user, {fields: [privateMessage.senderId], references: [user.id]}),
 }));
 
 export const sessionRelations = relations(session, ({one}) => ({

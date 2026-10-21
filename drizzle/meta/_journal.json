@@ -64,6 +64,20 @@
       "when": 1792501985330,
       "tag": "0008_friendly_king_cobra",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792560952198,
+      "tag": "0009_neat_emma_frost",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792562262508,
+      "tag": "0010_high_freak",
+      "breakpoints": true
     }
   ]
 }

@@ -18,6 +18,7 @@ export type AssessmentDecision = {
 };
 
 type DecisionInput = {
+  status: string;
   age: number | null;
   sexAssignedAtBirth: string | null;
   heightCm: number | null;
@@ -63,7 +64,8 @@ export function evaluateAssessmentDecision(input: DecisionInput): AssessmentDeci
     uniqueHealthValues.size === input.healthConditions.length &&
     input.healthConditions.every((item) => knownHealthValues.has(item)) &&
     !((uniqueHealthValues.has("NONE") || uniqueHealthValues.has("NOT_SURE")) && uniqueHealthValues.size > 1);
-  const requiredAnswersValid = Number.isInteger(input.age) && isFiniteWithin(input.age, 18, 120) &&
+  const requiredAnswersValid = input.status === "SUBMITTED" &&
+    Number.isInteger(input.age) && isFiniteWithin(input.age, 18, 120) &&
     input.sexAssignedAtBirth !== null && knownSexValues.has(input.sexAssignedAtBirth) &&
     isFiniteWithin(input.heightCm, 100, 250) && isFiniteWithin(input.currentWeightKg, 30, 400) &&
     isFiniteWithin(input.targetWeightKg, 30, 400) && input.targetWeightKg! < input.currentWeightKg! &&

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import {readFile} from "node:fs/promises";
 import test from "node:test";
 
 import {renderReportContent} from "../src/features/reports/content.ts";
 import {generateAiResearchPrompt} from "../src/features/reports/prompt.ts";
+import {reportDraftSchema} from "../src/features/reports/validation.ts";
 
 const questionnaire = {
   id: "questionnaire-id",
@@ -61,4 +63,30 @@ test("report rendering escapes HTML and links only HTTPS sources", () => {
   assert.match(html, /&lt;script&gt;/u);
   assert.match(html, /href="https:\/\/example\.org\/research"/u);
   assert.equal(html.includes('href="javascript:'), false);
+});
+
+test("report email template includes private conversation and optional estimates in both locales", async () => {
+  const source = await readFile(new URL("../src/features/reports/email.ts", import.meta.url), "utf8");
+  for (const required of ["Hello ${name}", "Hola ${name}", "messagesUrl", "referenceEstimate", "pharmacyEstimate", "safeHttps", "escapeHtml(translated.greeting(safeName))"]) {
+    assert.ok(source.includes(required), `expected report email behavior: ${required}`);
+  }
+  assert.match(source, /\$\{summaryHtml\}\$\{reportHtml\}\$\{referenceHtml\}\$\{pharmacyHtml\}\$\{messagesHtml\}/u);
+});
+
+test("optional report cost fields require a dated HTTPS pharmacy source", () => {
+  const base = {language: "en", content: "Report", referenceScenario: null, pharmacyEstimate: null};
+  assert.equal(reportDraftSchema.safeParse(base).success, true);
+  const referenceScenario = {treatment: "SEMAGLUTIDE", durationMonths: 16, deliveryMethod: "STANDARD_NEXT_DAY"};
+  const invalid = reportDraftSchema.safeParse({...base, referenceScenario, pharmacyEstimate: {
+    treatment: "SEMAGLUTIDE", amountPence: 10000, periodMonths: 1, sourceName: "Example", sourceUrl: "http://example.test", asOfDate: "2026-01-01",
+  }});
+  assert.equal(invalid.success, false);
+  const credentialed = reportDraftSchema.safeParse({...base, referenceScenario, pharmacyEstimate: {
+    treatment: "SEMAGLUTIDE", amountPence: 10000, periodMonths: 1, sourceName: "Example", sourceUrl: "https://user:secret@example.test/price", asOfDate: "2026-01-01",
+  }});
+  assert.equal(credentialed.success, false);
+  const valid = reportDraftSchema.safeParse({...base, referenceScenario, pharmacyEstimate: {
+    treatment: "SEMAGLUTIDE", amountPence: 10000, periodMonths: 1, sourceName: "Example", sourceUrl: "https://example.test/price", asOfDate: "2026-01-01",
+  }});
+  assert.equal(valid.success, true);
 });
