@@ -35,6 +35,14 @@ COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Include only migration runtime packages, not the development toolchain.
+COPY --from=dependencies --chown=nextjs:nodejs /app/node_modules/postgres ./node_modules/postgres
+COPY --from=dependencies --chown=nextjs:nodejs /app/node_modules/drizzle-orm ./node_modules/drizzle-orm
+COPY --chown=nextjs:nodejs drizzle/*.sql ./drizzle/
+COPY --chown=nextjs:nodejs drizzle/meta/_journal.json ./drizzle/meta/_journal.json
+COPY --chown=nextjs:nodejs scripts/db-migrate-safe.mjs scripts/migration-safety.mjs scripts/start-production.sh ./scripts/
+
 USER nextjs
 EXPOSE 3000
+ENTRYPOINT ["sh", "scripts/start-production.sh"]
 CMD ["node", "server.js"]

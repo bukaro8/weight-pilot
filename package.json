@@ -19,6 +19,7 @@
     "test:messages": "node --no-warnings --experimental-strip-types --test tests/messages.test.mjs",
     "test:release": "node --no-warnings --experimental-strip-types --test tests/release-preparation.test.mjs",
     "db:generate": "drizzle-kit generate",
+    "test:migrations": "node --test tests/migration-startup.test.mjs",
     "db:migrate": "node scripts/db-migrate-safe.mjs",
     "db:seed:pricing": "node scripts/seed-pricing.mjs",
     "auth:bootstrap-admin": "node scripts/bootstrap-admin.mjs"

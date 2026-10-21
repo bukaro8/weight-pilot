@@ -52,12 +52,14 @@ test("migration preflight blocks the known legacy data drop only when records ex
   assert.equal(hasRiskyLegacyProfileDrop([{tag: "0010_high_freak", sql: 'ALTER TABLE "report" ADD COLUMN "cost" jsonb;'}], true), false);
 });
 
-test("the migration command is explicit and administrator bootstrap has no startup hook", async () => {
+test("production gates startup on migrations and never bootstraps an administrator", async () => {
   const [compose, dockerfile] = await Promise.all([
     readFile(new URL("../docker-compose.yml", import.meta.url), "utf8"),
     readFile(new URL("../Dockerfile", import.meta.url), "utf8"),
   ]);
   assert.match(compose, /profiles: \["tools"\]/u);
+  assert.ok(dockerfile.includes('ENTRYPOINT ["sh", "scripts/start-production.sh"]'));
+  assert.doesNotMatch(dockerfile.slice(dockerfile.indexOf("FROM base AS runner")), /bootstrap-admin/u);
   assert.match(compose, /command: \["npm", "run", "auth:bootstrap-admin"\]/u);
   assert.match(dockerfile, /CMD \["node", "server\.js"\]/u);
   assert.match(dockerfile.slice(dockerfile.indexOf("FROM base AS runner")), /CMD \["node", "server\.js"\]/u);

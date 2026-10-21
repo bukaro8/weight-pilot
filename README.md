@@ -22,7 +22,25 @@ npm run typecheck
 npm run build
 ```
 
-## Docker deployment
+## Coolify production deployment (Dockerfile)
+
+The existing Coolify application uses the final `runner` stage of the Dockerfile and the separate PostgreSQL resource. Keep the existing runtime `DATABASE_URL` and network unchanged. No new environment variables, resource, SSH command or migration job are required.
+
+1. Back up the PostgreSQL resource using your existing backup procedure.
+2. Push this revision and click **Deploy** in the existing Coolify application. Use the Dockerfile's default entrypoint/command (remove any custom override that bypasses it). Do not select the optional `migrations` build target.
+3. Check application logs for `Database migrations complete: N applied.`, followed by Next.js readiness. Allow startup/health-check time for migrations; the HTTP server does not listen before completion.
+
+Every container start, including redeploys and restarts, runs `scripts/start-production.sh`. It runs `npm run db:migrate`'s underlying script, then replaces the shell with the standalone Next.js server. Already-applied migrations are skipped using the existing Drizzle journal. If production has 0000–0010 recorded, migration 0011 will run on the next deployment, once.
+
+Failures exit non-zero and **never start Next.js**. Database errors are redacted to avoid exposing SQL values or credentials. The legacy populated-`profiles` preflight still blocks unsafe historical migration 0001. Investigate connectivity, database permissions, pending SQL and lock contention before retrying; never clear the journal or use schema push to bypass a failure. A restart policy may retry a failed container; it will remain unavailable until the cause is fixed.
+
+The same transaction holds a PostgreSQL advisory lock through preflight, migration execution and journal updates. Competing new containers wait, then re-check the journal. Lock waits are bounded at 120 seconds; each SQL statement at 10 minutes. The database user needs schema/table migration privileges, as it did for manual migrations. Use the existing direct PostgreSQL connection, not a statement-pooling proxy.
+
+Keep migrations transactional and backwards-compatible with the previous application during rolling deployment. This lock does not protect old, already-running application code from incompatible schema changes, nor serialize external tools that ignore the lock. Review destructive migrations and use expand/contract releases. A code rollback does not undo schema changes. Long-running migrations may need a planned maintenance window and adjusted deployment health-check deadlines.
+
+Administrator bootstrap remains a separate, explicit operation. Startup never creates accounts, runs bootstrap, or reads administrator credentials. The runtime image contains no bootstrap script or administrator credentials.
+
+## Local Docker Compose deployment
 
 The production image uses Next.js standalone output and runs as an unprivileged user. PostgreSQL is reachable only over the internal Compose database network and has no published host port.
 
@@ -60,7 +78,7 @@ The production image uses Next.js standalone output and runs as an unprivileged 
    docker compose ps
    ```
 
-The application defaults to `http://127.0.0.1:3000`. Migrations are deliberately not run during application startup, so a failed migration cannot place the web container in a restart loop.
+The application defaults to `http://127.0.0.1:3000`. Application startup also runs the safe migration gate. The explicit migration command above is useful before seeding or initial administrator bootstrap; it is not required for ordinary redeploys.
 
 ### Initial administrator
 
@@ -155,13 +173,13 @@ Members see their preliminary assessment immediately and may separately request 
 
 Report emails include a concise assessment summary, reviewed guidance and a secure link to the member's private WeightPilot conversation. The administrator may optionally include the existing 6, 12 or 16-month illustrative reference-price scenario. A pharmacy comparison is optional and requires the administrator to supply the same treatment, amount, period, UK pharmacy/source name, HTTPS source and date checked. WeightPilot does not verify or invent pharmacy prices; the admin must check the linked source. These estimates are informational only, not quotes or offers to sell.
 
-No new environment variables are required. Keep `PUBLIC_APP_URL` set to the public HTTPS origin so report emails can link to the correct private message page. Resend delivery still requires `RESEND_API_KEY`, `EMAIL_FROM`, and a configured webhook secret for confirmed delivery status. Deploy the application code after applying the additive Drizzle migration; do not run migrations during application startup.
+No new environment variables are required. Keep `PUBLIC_APP_URL` set to the public HTTPS origin so report emails can link to the correct private message page. Resend delivery still requires `RESEND_API_KEY`, `EMAIL_FROM`, and a configured webhook secret for confirmed delivery status. Docker startup applies pending committed migrations before serving requests.
 
 Sessions are stored in PostgreSQL for seven days, refreshed daily, revoked after a password reset, and issued in secure, HTTP-only cookies in production. Private routes re-check the user record server-side, so inactive or unverified accounts are denied even if an older session cookie still exists.
 
 ### Updating
 
-Select the intended release revision in Coolify, then run from its Compose project directory. Back up the live database first; the backup is separate from the persistent Docker volume:
+For Coolify production, follow the Dockerfile deployment steps above; production does not use Compose. The following commands are only for the local/self-hosted Compose setup. Back up the database first; the backup is separate from the persistent Docker volume:
 
 ```bash
 mkdir -p backups
@@ -203,13 +221,17 @@ Generate migration files after an intentional schema change:
 npm run db:generate
 ```
 
-Commit the generated `drizzle/` files. Apply committed migrations explicitly and independently of application startup with:
+Commit the generated `drizzle/` files. Production Docker startup applies them automatically. For local development or explicit maintenance, use `npm run db:migrate` or:
 
 ```bash
 docker compose run --rm migrate
 ```
 
-`npm run db:migrate` performs a preflight before invoking `drizzle-kit migrate`. The current committed journal contains migrations `0000`–`0010`, including the private-messaging migration `0009_neat_emma_frost.sql` and report-cost migration `0010_high_freak.sql`; the database journal determines which ones are actually pending. The preflight stops before changes if migration `0001_wet_the_order.sql` is pending while the old `profiles` table contains records, because that historical migration drops the table. Back up and inspect those records; if they must be retained, archive them deliberately and verify the archive before rerunning the migration. No production journal has been inspected from this workspace, so production's exact pending set remains an on-host verification item.
+`npm run db:migrate` uses Drizzle's migration-file reader and SHA-256 hashing, retaining the standard `drizzle.__drizzle_migrations` table, timestamps and pending-selection semantics. Preflight, pending SQL and journal inserts share one locked transaction; failure rolls back the batch without changing earlier history. It does not use schema push or load development tooling. The committed journal contains `0000`–`0011`. Existing SQL and hashes must never be edited after deployment.
+
+The preflight stops if a pending migration would drop a non-empty legacy `profiles` table. Back up and inspect those records before deliberately preserving them and retrying. Production has not been accessed by this change.
+
+Run `npm run test:migrations` for startup tests. To include PostgreSQL integration tests, supply `TEST_MIGRATION_DATABASE_URL` pointing **only to an isolated test PostgreSQL instance**, with database-creation permission. Tests create and remove uniquely named disposable databases, test concurrent processes and rollback, and verify migration 0011 against history produced by the official Drizzle migrator. This variable is test-only and must not be configured in production.
 
 ## Database backup and restore
 
