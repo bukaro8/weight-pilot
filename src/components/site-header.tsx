@@ -11,7 +11,7 @@ import {cn} from "@/lib/utils";
 import {LanguageToggle} from "./language-toggle";
 import {headerNavigationKind} from "@/features/navigation/visibility";
 
-const memberLinks = [["/", "home"], ["/dashboard", "dashboard"], ["/consultations", "consultations"], ["/reports", "reports"], ["/invitations", "invitations"], ["/messages", "messages"]] as const;
+const memberLinks = [["/dashboard", "dashboard"], ["/consultations", "consultations"], ["/reports", "reports"], ["/invitations", "invitations"], ["/messages", "messages"]] as const;
 const adminLinks = [["/", "home"], ["/admin", "admin"]] as const;
 const publicLinks = [["/", "home"]] as const;
 
@@ -23,6 +23,8 @@ export function SiteHeader() {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const navigationKind = headerNavigationKind(isPending, session?.user.role);
   const links = navigationKind === "admin" ? adminLinks : navigationKind === "member" ? memberLinks : publicLinks;
+  const homeHref = navigationKind === "member" ? "/dashboard" : navigationKind === "admin" ? "/admin" : "/";
+  const homeLabel = navigationKind === "member" ? t("dashboard") : navigationKind === "admin" ? t("admin") : t("home");
 
   useEffect(() => {
     let active = true;
@@ -54,7 +56,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-primary/10 bg-background/92 backdrop-blur-xl supports-[backdrop-filter]:bg-background/82">
       <div className="mx-auto flex h-[4.5rem] max-w-7xl items-center justify-between gap-1.5 px-3 min-[360px]:gap-3 min-[360px]:px-4 sm:px-6 lg:h-20 lg:px-10">
-        <Link href="/" aria-label={t("home")} className="inline-flex min-h-11 shrink-0 items-center rounded-md"><BrandLogo priority className="w-[112px] min-[360px]:w-[132px] sm:w-[148px] lg:w-[164px]"/></Link>
+        <Link href={homeHref} aria-label={homeLabel} className="inline-flex min-h-11 shrink-0 items-center rounded-md"><BrandLogo priority className="w-[112px] min-[360px]:w-[132px] sm:w-[148px] lg:w-[164px]"/></Link>
         <nav className="hidden h-full items-center gap-1 lg:flex" aria-label={t("primaryNavigation")}>
           {links.map(([href, key]) => <Link key={key} href={href} aria-current={isActive(href) ? "page" : undefined} aria-label={href === "/messages" && memberUnread > 0 ? t("unreadMessages", {count: memberUnread}) : undefined} className={cn("relative inline-flex h-full items-center gap-2 px-3 text-sm font-medium text-muted transition-colors duration-200 after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:origin-center after:scale-x-0 after:rounded-full after:bg-accent-strong after:transition-transform hover:text-primary", isActive(href) && "text-primary after:scale-x-100")}>{t(key)}{href === "/messages" && memberUnread > 0 ? <span aria-hidden="true" className="inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-white">{memberUnread > 99 ? "99+" : memberUnread}</span> : null}</Link>)}
         </nav>

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {readFile} from "node:fs/promises";
 import test from "node:test";
 
 import {isLocalHttpAuthOrigin, usesSecureAuthCookies, withLocalAuthClientIp} from "../src/features/auth/config.ts";
@@ -35,6 +36,25 @@ test("only active, verified ADMIN accounts pass the admin policy", () => {
 
 test("post-login routing sends administrators to their dedicated dashboard", () => {
   assert.equal(postLoginDestination({role: "ADMIN"}, "/consultations"), "/admin");
+  assert.equal(postLoginDestination({role: "USER"}), "/dashboard");
+  assert.equal(postLoginDestination({role: "USER"}, "/dashboard"), "/dashboard");
   assert.equal(postLoginDestination({role: "USER"}, "/consultations/results"), "/consultations/results");
-  assert.equal(postLoginDestination({role: "USER"}, "//example.test"), "/consultations");
+  assert.equal(postLoginDestination({role: "USER"}, "/reports/abc?tab=latest"), "/reports/abc?tab=latest");
+  assert.equal(postLoginDestination({role: "USER"}, "/admin"), "/dashboard");
+  assert.equal(postLoginDestination({role: "USER"}, "//example.test"), "/dashboard");
+  assert.equal(postLoginDestination({role: "USER"}, "/\\\\example.test"), "/dashboard");
+  assert.equal(postLoginDestination({role: "USER"}, "https://example.test"), "/dashboard");
+  assert.equal(postLoginDestination({role: "USER"}, "/login"), "/dashboard");
+});
+
+test("authenticated member header logo and dashboard navigation stay in the member workspace", async () => {
+  const [header, signIn] = await Promise.all([
+    readFile(new URL("../src/components/site-header.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/auth/sign-in-form.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(header, /const memberLinks = \[\["\/dashboard", "dashboard"\]/u);
+  assert.match(header, /navigationKind === "member" \? "\/dashboard"/u);
+  assert.match(header, /href=\{homeHref\}/u);
+  assert.match(signIn, /fetch\(`\/api\/auth\/destination/u);
+  assert.doesNotMatch(signIn, /router\.replace\(destinationBody\?\.destination \?\? "\/consultations"/u);
 });

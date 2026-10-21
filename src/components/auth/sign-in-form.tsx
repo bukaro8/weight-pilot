@@ -48,8 +48,10 @@ export function SignInForm({nextPath}: {nextPath?: string}) {
         return;
       }
       const destinationResponse = await fetch(`/api/auth/destination${nextPath ? `?next=${encodeURIComponent(nextPath)}` : ""}`, {headers: {accept: "application/json"}});
-      const destinationBody = destinationResponse.ok ? await destinationResponse.json() as {destination?: string} : undefined;
-      router.replace(destinationBody?.destination ?? "/consultations", {locale});
+      if (!destinationResponse.ok) throw new Error("DESTINATION_UNAVAILABLE");
+      const destinationBody = await destinationResponse.json() as {destination?: string};
+      if (!destinationBody.destination) throw new Error("DESTINATION_UNAVAILABLE");
+      router.replace(destinationBody.destination, {locale});
       router.refresh();
     } catch {
       setError(t("errorUnavailable"));
