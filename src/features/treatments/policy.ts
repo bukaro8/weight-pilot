@@ -6,7 +6,7 @@ export function canBrowseTreatments(account: Pick<AppUser, "role" | "status" | "
 
 export function canChangeRequestStatus(current: string, next: string) {
   if (current === next) return true;
-  if (current === "SUBMITTED") return ["UNDER_REVIEW", "DECLINED", "CANCELLED"].includes(next);
-  if (current === "UNDER_REVIEW") return ["APPROVED_FOR_NEXT_STEPS", "DECLINED", "CANCELLED"].includes(next);
+  if (current === "SUBMITTED") return ["APPROVED_FOR_NEXT_STEPS", "DECLINED"].includes(next);
+  if (current === "UNDER_REVIEW") return ["APPROVED_FOR_NEXT_STEPS", "DECLINED"].includes(next);
   return false;
 }

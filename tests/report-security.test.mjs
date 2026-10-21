@@ -175,7 +175,7 @@ test("report email template includes private conversation and bilingual comparis
   for (const required of ["Hello ${name}", "Hola ${name}", "messagesUrl", "referenceEstimate", "pharmacyEstimate", "safeHttps", "escapeHtml(translated.greeting(safeName))", "Your potential savings over 16 months", "Tu posible ahorro en 16 meses", "Illustrative medicine costs", "Costes ilustrativos del medicamento"]) {
     assert.ok(source.includes(required), `expected report email behavior: ${required}`);
   }
-  assert.match(source, /\$\{summaryHtml\}\$\{reportHtml\}\$\{savingsHtml\}\$\{referenceHtml\}\$\{pharmacyHtml\}\$\{messagesHtml\}/u);
+  assert.match(source, /\$\{summaryHtml\}\$\{reportHtml\}\$\{savingsHtml\}\$\{referenceHtml\}\$\{pharmacyHtml\}\$\{treatmentsHtml\}\$\{messagesHtml\}/u);
 });
 
 test("approved comparison renders in EN/ES email and provider acceptance or failure is reported without a live send", async () => {
@@ -189,12 +189,17 @@ test("approved comparison renders in EN/ES email and provider acceptance or fail
   const comparison = buildSavingsComparison({treatment: "TIRZEPATIDE", pricing, pharmacy: reference("TIRZEPATIDE", ["2.5 mg", "5 mg", "7.5 mg", "10 mg", "12.5 mg", "15 mg"], [17900, 19900, 25900, 29900, 31900, 33900])});
   const content = JSON.stringify({recommendedTreatment: "TIRZEPATIDE", confidence: "HIGH", reason: "Evidence supports discussing this option for the stated goal.", requiresMedicalReview: false});
   for (const language of ["en", "es"]) {
-    const email = renderGuidanceReportEmail({language, memberName: "Test member", content, savingsComparison: comparison});
+    const email = renderGuidanceReportEmail({language, memberName: "Test member", content, savingsComparison: comparison, treatmentsUrl: `https://weightpilot.uk/${language}/treatments/tirzepatide`});
     assert.match(email.html, /£1185\.00/u);
     assert.match(email.html, /£4984\.00/u);
     assert.match(email.html, /£3799\.00/u);
     assert.match(email.html, language === "en" ? /Your potential savings over 16 months/u : /Tu posible ahorro en 16 meses/u);
+    assert.match(email.html, language === "en" ? /Explore treatment information/u : /Explorar información sobre el tratamiento/u);
+    assert.match(email.html, /treatments\/tirzepatide/u);
   }
+  const reviewContent = JSON.stringify({recommendedTreatment: "REVIEW_REQUIRED", confidence: "INSUFFICIENT_INFORMATION", reason: "Further review is needed.", requiresMedicalReview: true});
+  const noTreatmentCta = renderGuidanceReportEmail({language: "en", memberName: "Test member", content: reviewContent, treatmentsUrl: "https://weightpilot.uk/en/treatments/semaglutide"});
+  assert.doesNotMatch(noTreatmentCta.html, /Explore treatment information/u);
   const originalKey = process.env.RESEND_API_KEY;
   const originalFrom = process.env.EMAIL_FROM;
   process.env.RESEND_API_KEY = "test-key";

@@ -7,7 +7,7 @@ import {consultationReport, questionnaire, questionnaireReviewRequest, reportDel
 import {assessmentOutcomeSchema} from "@/features/assessment/validation";
 import {calculatePreliminaryAssessment} from "@/features/assessment/engine";
 import {serializeQuestionnaire} from "@/features/questionnaire/server";
-import {normalizeReportContent} from "@/features/reports/content";
+import {getClearTreatmentSuggestion, normalizeReportContent} from "@/features/reports/content";
 import {deliverGuidanceReport, renderGuidanceReportEmail, sendReviewRequestNotification} from "@/features/reports/email";
 import {ReportSettlementError, settleReportSend} from "@/features/reports/send-finalization";
 import {generateAiResearchPrompt} from "@/features/reports/prompt";
@@ -78,6 +78,10 @@ export async function getReportWorkspace(reviewRequestId: string, promptLanguage
   const pharmacyReferences = await getReportPharmacyReferences();
   const origin = publicInvitationOrigin(process.env.PUBLIC_APP_URL || process.env.BETTER_AUTH_URL);
   const messagesUrl = origin ? new URL(`/${report.language}/messages`, origin).toString() : "";
+  const suggestedTreatment = getClearTreatmentSuggestion(report.content);
+  const treatmentsUrl = origin && suggestedTreatment
+    ? new URL(`/${report.language}/treatments/${suggestedTreatment.toLowerCase()}`, origin).toString()
+    : "";
   const emailExtras = {
     summary: buildEmailSummary(questionnaireData, assessment.bmi, assessment.targetWeightLossPercentage, report.language),
     // The automatic comparison is the single like-for-like comparison in the email.
@@ -86,6 +90,7 @@ export async function getReportWorkspace(reviewRequestId: string, promptLanguage
     pharmacyEstimate: null,
     savingsComparison: report.savingsComparisonEnabled ? report.savingsComparison : null,
     messagesUrl,
+    treatmentsUrl,
   };
   return {
     reviewRequestId: record.review.id, reviewStatus: record.review.status,
@@ -169,6 +174,10 @@ export async function sendReport(adminId: string, reviewRequestId: string) {
   });
 
   const messagesUrl = new URL(`/${prepared.report.language}/messages`, origin).toString();
+  const suggestedTreatment = getClearTreatmentSuggestion(prepared.report.content);
+  const treatmentsUrl = suggestedTreatment
+    ? new URL(`/${prepared.report.language}/treatments/${suggestedTreatment.toLowerCase()}`, origin).toString()
+    : "";
   const questionnaireData = serializeQuestionnaire(prepared.questionnaire);
   const assessment = assessmentOutcomeSchema.safeParse(questionnaireData.assessmentOutcome);
   const outcome = assessment.success ? assessment.data : calculatePreliminaryAssessment(questionnaireData);
@@ -182,6 +191,7 @@ export async function sendReport(adminId: string, reviewRequestId: string) {
     pharmacyEstimate: null,
     savingsComparison: prepared.report.savingsComparisonEnabled ? prepared.report.savingsComparison : null,
     messagesUrl,
+    treatmentsUrl,
   });
   const now = new Date();
   let accepted: typeof consultationReport.$inferSelect;

@@ -175,6 +175,12 @@ Report emails include a concise assessment summary, reviewed guidance and a secu
 
 No new environment variables are required. Keep `PUBLIC_APP_URL` set to the public HTTPS origin so report emails can link to the correct private message page. Resend delivery still requires `RESEND_API_KEY`, `EMAIL_FROM`, and a configured webhook secret for confirmed delivery status. Docker startup applies pending committed migrations before serving requests.
 
+### Treatment request decisions and payment email
+
+Members with an available delivered report can submit their contact details from a treatment information page. Administrators can approve for administrative next steps or decline. Approval requires an explicit product and configured strength selection; it is not a prescription or medical suitability decision. The member receives a bilingual payment email at the verified account address, with a secure private-messages link. Resend acceptance is stored with its provider message ID so the approval email is not resent after acceptance.
+
+The optional runtime variables `ACCOUNT_NAME`, `SORT_CODE`, and `ACCOUNT_NUMBER` customise the bank details in the approval email. When unset, the email uses the requested placeholders (`XXXX`, `00 00 00`, and `0000000`); configure real payment details before using approvals. Cash is also offered as an option. The approval email uses the existing `RESEND_API_KEY`, verified `EMAIL_FROM`, and public `PUBLIC_APP_URL`. No new Coolify resource is required. Docker startup applies the committed treatment-request migrations before the application starts.
+
 Sessions are stored in PostgreSQL for seven days, refreshed daily, revoked after a password reset, and issued in secure, HTTP-only cookies in production. Private routes re-check the user record server-side, so inactive or unverified accounts are denied even if an older session cookie still exists.
 
 ### Updating

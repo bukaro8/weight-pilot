@@ -113,6 +113,20 @@
       "when": 1792620318885,
       "tag": "0015_black_king_bedlam",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792624054573,
+      "tag": "0016_legal_hellion",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1792624101202,
+      "tag": "0017_perfect_stellaris",
+      "breakpoints": true
     }
   ]
 }

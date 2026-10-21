@@ -1,6 +1,6 @@
 import "server-only";
 
-import {and, desc, eq, isNotNull, or} from "drizzle-orm";
+import {and, desc, eq, isNotNull, isNull, or} from "drizzle-orm";
 import {z} from "zod";
 import {getDb} from "@/db";
 import {consultationReport, messageConversation, questionnaire, questionnaireReviewRequest, treatmentAccessRequest, treatmentRequestStatusEvent, user} from "@/db/schema";
@@ -32,7 +32,7 @@ export async function getAdminRequests(status?: string) {
 
 export async function getAdminRequest(requestId: string) {
   if (!z.uuid().safeParse(requestId).success) return null;
-  const [row] = await getDb().select({request: treatmentAccessRequest, memberName: user.name, memberEmail: user.email})
+  const [row] = await getDb().select({request: treatmentAccessRequest, memberName: user.name, memberEmail: user.email, emailVerified: user.emailVerified})
     .from(treatmentAccessRequest).innerJoin(user, eq(treatmentAccessRequest.memberId, user.id))
     .where(eq(treatmentAccessRequest.id, requestId)).limit(1);
   if (!row) return null;
@@ -81,9 +81,27 @@ export async function updateTreatmentRequest(adminId: string, requestId: string,
     const [current] = await tx.select().from(treatmentAccessRequest).where(eq(treatmentAccessRequest.id, requestId)).limit(1).for("update");
     if (!current) throw new Error("REQUEST_NOT_FOUND");
     if (!canChangeRequestStatus(current.status, input.status)) throw new Error("REQUEST_INVALID_TRANSITION");
+    if (["APPROVED_FOR_NEXT_STEPS", "DECLINED"].includes(current.status) && (current.status !== input.status || current.approvedTreatment !== input.approvedTreatment || current.approvedStrength !== input.approvedStrength || current.declineReason !== input.declineReason)) throw new Error("REQUEST_ALREADY_FINAL");
     const changed = current.status !== input.status;
-    const [updated] = await tx.update(treatmentAccessRequest).set({...input, updatedAt: new Date()}).where(eq(treatmentAccessRequest.id, requestId)).returning();
+    const [updated] = await tx.update(treatmentAccessRequest).set({
+      status: input.status,
+      internalNote: input.internalNote,
+      declineReason: input.status === "DECLINED" ? input.declineReason : null,
+      approvedTreatment: input.status === "APPROVED_FOR_NEXT_STEPS" ? input.approvedTreatment : null,
+      approvedStrength: input.status === "APPROVED_FOR_NEXT_STEPS" ? input.approvedStrength : null,
+      updatedAt: new Date(),
+    }).where(eq(treatmentAccessRequest.id, requestId)).returning();
     if (changed) await tx.insert(treatmentRequestStatusEvent).values({requestId, status: input.status, changedByUserId: adminId});
     return {request: updated, changed};
+  });
+}
+
+export async function recordApprovalEmailAccepted(adminId: string, requestId: string, providerMessageId: string) {
+  return getDb().transaction(async (tx) => {
+    const [admin] = await tx.select({role: user.role, status: user.status, emailVerified: user.emailVerified}).from(user).where(eq(user.id, adminId)).limit(1);
+    if (!admin || admin.role !== "ADMIN" || admin.status !== "ACTIVE" || !admin.emailVerified) throw new Error("REQUEST_FORBIDDEN");
+    const [updated] = await tx.update(treatmentAccessRequest).set({approvalEmailProviderMessageId: providerMessageId, approvalEmailAcceptedAt: new Date(), updatedAt: new Date()})
+      .where(and(eq(treatmentAccessRequest.id, requestId), eq(treatmentAccessRequest.status, "APPROVED_FOR_NEXT_STEPS"), isNull(treatmentAccessRequest.approvalEmailAcceptedAt))).returning({id: treatmentAccessRequest.id});
+    return Boolean(updated);
   });
 }

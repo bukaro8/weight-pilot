@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {readFileSync} from "node:fs";
+import {registerHooks} from "node:module";
 import {canBrowseTreatments, canChangeRequestStatus} from "../src/features/treatments/policy.ts";
-import {createTreatmentRequestSchema, updateTreatmentRequestSchema} from "../src/features/treatments/validation.ts";
+import {createTreatmentRequestSchema, treatmentDecisionSchema} from "../src/features/treatments/validation.ts";
 import {treatmentFromPath, treatmentItems} from "../src/features/treatments/presentation.ts";
-import {renderTreatmentRequestNotification} from "../src/features/treatments/email-template.ts";
+import {renderTreatmentApprovalEmail, renderTreatmentRequestNotification} from "../src/features/treatments/email-template.ts";
 import {catalogueDosePriceRows, catalogueDoseStages} from "../src/features/treatments/dose-stages.ts";
+import {getClearTreatmentSuggestion} from "../src/features/reports/content.ts";
 
 const eligible = {role: "USER", status: "ACTIVE", emailVerified: true};
 const request = {clientRequestId: "a8e8b6b2-6401-45cc-9b77-99517e0a37d1", reportId: "8479dca7-6810-4efb-bd27-069c49417286", treatment: "SEMAGLUTIDE", fullName: "Alex Example", address: "1 Example Road, London", postcode: "SW1A 1AA", telephone: "+44 7700 900123", language: "en"};
@@ -41,11 +43,13 @@ test("request validation accepts both languages and rejects malformed contact da
 });
 
 test("status transitions are restricted and declining requires a reason", () => {
-  assert.equal(canChangeRequestStatus("SUBMITTED", "APPROVED_FOR_NEXT_STEPS"), false);
+  assert.equal(canChangeRequestStatus("SUBMITTED", "APPROVED_FOR_NEXT_STEPS"), true);
   assert.equal(canChangeRequestStatus("UNDER_REVIEW", "APPROVED_FOR_NEXT_STEPS"), true);
   assert.equal(canChangeRequestStatus("APPROVED_FOR_NEXT_STEPS", "UNDER_REVIEW"), false);
-  assert.equal(updateTreatmentRequestSchema.safeParse({status: "DECLINED", internalNote: "", declineReason: ""}).success, false);
-  assert.equal(updateTreatmentRequestSchema.safeParse({status: "DECLINED", internalNote: "", declineReason: "Information incomplete"}).success, true);
+  assert.equal(treatmentDecisionSchema.safeParse({status: "DECLINED", internalNote: "", declineReason: "", approvedTreatment: null, approvedStrength: null}).success, false);
+  assert.equal(treatmentDecisionSchema.safeParse({status: "DECLINED", internalNote: "", declineReason: "Information incomplete", approvedTreatment: null, approvedStrength: null}).success, true);
+  assert.equal(treatmentDecisionSchema.safeParse({status: "APPROVED_FOR_NEXT_STEPS", internalNote: "", declineReason: "", approvedTreatment: "TIRZEPATIDE", approvedStrength: "12.5 mg"}).success, true);
+  assert.equal(treatmentDecisionSchema.safeParse({status: "APPROVED_FOR_NEXT_STEPS", internalNote: "", declineReason: "", approvedTreatment: "TIRZEPATIDE", approvedStrength: "17.5 mg"}).success, false);
 });
 
 test("EN and ES treatment keys match", () => {
@@ -62,9 +66,66 @@ test("notifications are bilingual, generic and contain only a secure request lin
   assert.doesNotMatch(en.html + es.html, /questionnaire|medicine|address|telephone/i);
 });
 
+test("approval emails are bilingual, include configured or fallback payment details and private messaging", () => {
+  const en = renderTreatmentApprovalEmail({language: "en", memberName: "A. Member", treatment: "TIRZEPATIDE", strength: "12.5 mg", messagesUrl: "https://weightpilot.uk/en/messages"});
+  const es = renderTreatmentApprovalEmail({language: "es", memberName: "A. Member", treatment: "SEMAGLUTIDE", strength: "1.7 mg", messagesUrl: "https://weightpilot.uk/es/messages", accountName: "WeightPilot", accountNumber: "12345678", sortCode: "11 22 33"});
+  assert.match(en.html, /Your request has been approved for next steps/);
+  assert.match(en.html, /0000000/);
+  assert.match(en.html, /00 00 00/);
+  assert.match(en.html, /XXXX/);
+  assert.match(en.html, /12\.5 mg/);
+  assert.match(en.html, /https:\/\/weightpilot\.uk\/en\/messages/);
+  assert.match(es.html, /Tu solicitud se ha aprobado/);
+  assert.match(es.html, /11 22 33/);
+  assert.match(es.html, /12345678/);
+  assert.match(es.html, /https:\/\/weightpilot\.uk\/es\/messages/);
+  assert.match(en.html, /not a prescription/i);
+});
+
+test("approval email uses the verified account recipient and a stable idempotency key without live delivery", async () => {
+  registerHooks({resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") return {url: "data:text/javascript,export%20default%20undefined", shortCircuit: true};
+    if (specifier === "resend") return {url: `data:text/javascript,${encodeURIComponent("export class Resend { constructor() { this.emails = {send: async (...args) => { globalThis.__treatmentMailCalls.push(args); return globalThis.__treatmentMailResult; }}; }}")}`, shortCircuit: true};
+    if (specifier === "./email-template") return nextResolve(new URL("../src/features/treatments/email-template.ts", import.meta.url).href, context);
+    if (specifier.startsWith("@/")) return nextResolve(new URL(`../src/${specifier.slice(2)}.ts`, import.meta.url).href, context);
+    return nextResolve(specifier, context);
+  }});
+  const {sendTreatmentApprovalEmail} = await import("../src/features/treatments/email.ts");
+  const env = Object.fromEntries(["RESEND_API_KEY", "EMAIL_FROM", "PUBLIC_APP_URL", "ACCOUNT_NAME", "ACCOUNT_NUMBER", "SORT_CODE"].map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {RESEND_API_KEY: "test-key", EMAIL_FROM: "sender@example.invalid", PUBLIC_APP_URL: "https://weightpilot.uk"});
+  globalThis.__treatmentMailCalls = [];
+  globalThis.__treatmentMailResult = {data: {id: "resend-message-id"}, error: null};
+  try {
+    const result = await sendTreatmentApprovalEmail({id: "request-123", language: "en", recipient: "verified@example.invalid", memberName: "Member", treatment: "SEMAGLUTIDE", strength: "1.7 mg"});
+    assert.deepEqual(result, {accepted: true, reason: null, providerMessageId: "resend-message-id"});
+    assert.equal(globalThis.__treatmentMailCalls[0][0].to, "verified@example.invalid");
+    assert.equal(globalThis.__treatmentMailCalls[0][1].idempotencyKey, "weightpilot-treatment-approval-request-123");
+    assert.match(globalThis.__treatmentMailCalls[0][0].html, /0000000/);
+    const route = readFileSync(new URL("../src/app/api/admin/treatment-requests/[id]/route.ts", import.meta.url), "utf8");
+    assert.match(route, /if \(!detail\.emailVerified\)/u);
+    assert.match(route, /recipient: detail\.memberEmail/u);
+  } finally {
+    for (const [key, value] of Object.entries(env)) {if (value === undefined) delete process.env[key]; else process.env[key] = value;}
+    delete globalThis.__treatmentMailCalls;
+    delete globalThis.__treatmentMailResult;
+  }
+});
+
+test("report treatment CTA eligibility requires a clear treatment suggestion", () => {
+  const clear = JSON.stringify({recommendedTreatment: "SEMAGLUTIDE", confidence: "HIGH", reason: "Evidence supports this option for discussion.", requiresMedicalReview: false});
+  const review = JSON.stringify({recommendedTreatment: "REVIEW_REQUIRED", confidence: "INSUFFICIENT_INFORMATION", reason: "Further review is needed.", requiresMedicalReview: true});
+  const medicallyUnreviewed = JSON.stringify({recommendedTreatment: "TIRZEPATIDE", confidence: "HIGH", reason: "A comparison supports discussion.", requiresMedicalReview: true});
+  assert.equal(getClearTreatmentSuggestion(clear), "SEMAGLUTIDE");
+  assert.equal(getClearTreatmentSuggestion(review), null);
+  assert.equal(getClearTreatmentSuggestion(medicallyUnreviewed), null);
+});
+
 test("migration preserves idempotency, ownership and request history", () => {
   const migration = readFileSync(new URL("../drizzle/0015_black_king_bedlam.sql", import.meta.url), "utf8");
   assert.match(migration, /treatment_access_request_member_client_uidx/);
   assert.match(migration, /treatment_request_status_event/);
   assert.match(migration, /ON DELETE cascade/);
+  const decisionMigration = readFileSync(new URL("../drizzle/0016_legal_hellion.sql", import.meta.url), "utf8");
+  assert.match(decisionMigration, /approved_treatment/);
+  assert.match(decisionMigration, /approved_strength/);
 });

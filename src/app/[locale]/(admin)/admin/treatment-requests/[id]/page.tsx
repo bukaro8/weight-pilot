@@ -32,7 +32,7 @@ export default async function AdminRequestPage({params}: {params: Promise<{local
         </section>
         <section className="rounded-3xl border border-border bg-surface p-5 sm:p-7"><h2 className="font-display text-2xl text-primary-dark">{t("history")}</h2><ol className="mt-4 space-y-3">{events.map((event) => <li key={`${event.status}-${event.createdAt.toISOString()}`} className="flex flex-wrap justify-between gap-2 border-b border-border pb-3 text-sm"><span className="font-semibold text-primary-dark">{t(event.status)}</span><time className="text-muted" dateTime={event.createdAt.toISOString()}>{date(event.createdAt)}</time></li>)}</ol></section>
       </div>
-      <AdminRequestEditor id={id} initial={{status: request.status, internalNote: request.internalNote ?? "", declineReason: request.declineReason ?? ""}}/>
+      <AdminRequestEditor id={id} initial={{status: request.status, internalNote: request.internalNote ?? "", declineReason: request.declineReason ?? "", approvedTreatment: request.approvedTreatment, approvedStrength: request.approvedStrength}}/>
     </div>
   </main>;
 }

@@ -1,0 +1,2 @@
+ALTER TABLE "treatment_access_request" ADD COLUMN "approval_email_provider_message_id" text;--> statement-breakpoint
+ALTER TABLE "treatment_access_request" ADD COLUMN "approval_email_accepted_at" timestamp with time zone;

@@ -26,6 +26,13 @@ function parseRenderableAssessment(content: string): RenderableAssessment | null
   }
 }
 
+export function getClearTreatmentSuggestion(content: string): "SEMAGLUTIDE" | "TIRZEPATIDE" | null {
+  const assessment = parseRenderableAssessment(content);
+  return assessment && assessment.recommendedTreatment !== "REVIEW_REQUIRED" && !assessment.requiresMedicalReview
+    ? assessment.recommendedTreatment
+    : null;
+}
+
 const assessmentCopy = {
   en: {
     treatment: "Treatment evidence to discuss",
