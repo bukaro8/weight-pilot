@@ -11,7 +11,7 @@ import {cn} from "@/lib/utils";
 import {LanguageToggle} from "./language-toggle";
 import {headerNavigationKind} from "@/features/navigation/visibility";
 
-const memberLinks = [["/", "home"], ["/consultations", "consultations"], ["/invitations", "invitations"], ["/messages", "messages"]] as const;
+const memberLinks = [["/", "home"], ["/dashboard", "dashboard"], ["/consultations", "consultations"], ["/reports", "reports"], ["/invitations", "invitations"], ["/messages", "messages"]] as const;
 const adminLinks = [["/", "home"], ["/admin", "admin"]] as const;
 const publicLinks = [["/", "home"]] as const;
 

@@ -41,6 +41,7 @@ export type MemberReviewRequest = {
   id: string;
   reportLanguage: "en" | "es";
   status: ReviewRequestStatus;
+  reportId: string | null;
   requestedAt: string;
   updatedAt: string;
 };

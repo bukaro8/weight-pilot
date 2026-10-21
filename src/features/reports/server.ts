@@ -11,28 +11,13 @@ import {normalizeReportContent} from "@/features/reports/content";
 import {deliverGuidanceReport, renderGuidanceReportEmail, sendReviewRequestNotification} from "@/features/reports/email";
 import {ReportSettlementError, settleReportSend} from "@/features/reports/send-finalization";
 import {generateAiResearchPrompt} from "@/features/reports/prompt";
+import {buildEmailSummary} from "@/features/reports/summary";
 import {parseReportAssessment} from "@/features/reports/validation";
 import {buildSavingsComparison, getMissingPharmacyReferenceStrengths, resolveComparisonTreatment, type SavingsComparisonSnapshot} from "@/features/reports/savings-comparison";
 import {getPharmacyReferenceData, getTreatmentPricing, PricingConfigurationError} from "@/features/pricing/server";
 import type {PharmacyReferenceData} from "@/features/pricing/types";
 import {publicInvitationOrigin} from "@/features/invitations/sharing";
 import type {ReportLanguage, ReportRecord, ReportWorkspaceData} from "@/features/reports/types";
-
-const conditionEmailLabels: Record<string, Record<ReportLanguage, string>> = {
-  DIABETES: {en: "Diabetes", es: "Diabetes"}, HIGH_BLOOD_PRESSURE: {en: "High blood pressure", es: "Tensión arterial alta"},
-  HEART_CONDITIONS: {en: "Heart conditions", es: "Afecciones cardíacas"}, KIDNEY_OR_LIVER_DISEASE: {en: "Kidney or liver disease", es: "Enfermedad renal o hepática"},
-  PANCREATITIS_OR_GALLBLADDER: {en: "Pancreatitis or gallbladder problems", es: "Pancreatitis o problemas de vesícula"}, SERIOUS_DIGESTIVE_PROBLEMS: {en: "Serious digestive problems", es: "Problemas digestivos graves"},
-  DIABETIC_EYE_DISEASE: {en: "Diabetic eye disease", es: "Enfermedad ocular diabética"}, PREGNANCY: {en: "Pregnancy, breastfeeding or pregnancy plans", es: "Embarazo, lactancia o planes de embarazo"},
-  OTHER: {en: "Other health conditions", es: "Otras afecciones de salud"}, NOT_SURE: {en: "Not sure", es: "No está claro"},
-};
-
-function buildEmailSummary(questionnaireData: ReturnType<typeof serializeQuestionnaire>, bmi: number | null, targetLossPercentage: number | null, language: ReportLanguage) {
-  return {
-    currentWeightKg: questionnaireData.currentWeightKg, targetWeightKg: questionnaireData.targetWeightKg, bmi, targetLossPercentage,
-    healthConsiderations: questionnaireData.healthConditions.filter((condition) => condition !== "NONE").map((condition) => conditionEmailLabels[condition]?.[language] ?? condition),
-    medicationStatus: questionnaireData.noMedication ? "NONE_REPORTED" as const : questionnaireData.medications?.trim() ? "REPORTED" as const : "UNCLEAR" as const,
-  };
-}
 
 export class ReportError extends Error {
   constructor(public readonly code: "REPORT_NOT_FOUND" | "REPORT_LOCKED" | "REPORT_EMPTY" | "REPORT_INVALID_CONTENT" | "REPORT_ALREADY_SENT" | "RECIPIENT_UNVERIFIED" | "REPORT_PROVIDER_REJECTED" | "REPORT_EMAIL_NOT_CONFIGURED" | "REPORT_SEND_UNCERTAIN" | "REPORT_ACCEPTANCE_UNRECORDED" | "REPORT_DATABASE_FAILED" | "REPORT_PUBLIC_URL_NOT_CONFIGURED" | "REPORT_INVALID_PHARMACY" | "COMPARISON_PRICES_MISSING") { super(code); }

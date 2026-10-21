@@ -6,6 +6,7 @@ import {useState} from "react";
 
 import {Button} from "@/components/ui/button";
 import type {AssessmentOutcome, MemberReviewRequest} from "@/features/assessment/types";
+import {Link} from "@/i18n/navigation";
 import type {HealthCondition} from "@/features/questionnaire/validation";
 import {cn} from "@/lib/utils";
 
@@ -27,11 +28,25 @@ const sources = {
 
 export function TreatmentResults({questionnaireId, firstName, outcome, healthConditions, preferredReportLanguage, initialReviewRequest}: Props) {
   const t = useTranslations("assessmentResults");
+  const memberAreaT = useTranslations("memberArea.reviewStatus");
   const questionnaireT = useTranslations("questionnaire");
   const [reportLanguage, setReportLanguage] = useState<ReportLanguage>(initialReviewRequest?.reportLanguage ?? preferredReportLanguage);
   const [reviewRequest, setReviewRequest] = useState(initialReviewRequest);
   const [requestState, setRequestState] = useState<"idle" | "submitting" | "error">("idle");
   const reviewRequired = outcome.decisionStatus === "REVIEW_REQUIRED";
+  const reportReady = Boolean(reviewRequest?.reportId);
+  const reviewTitle = reportReady
+    ? memberAreaT("completedTitle")
+    : reviewRequest?.status === "REQUESTED" ? memberAreaT("requestedTitle")
+      : reviewRequest?.status === "IN_REVIEW" ? memberAreaT("inReviewTitle")
+        : reviewRequest ? memberAreaT("unknownTitle")
+          : t(reviewRequired ? "review.priorityTitle" : "review.title");
+  const reviewBody = reportReady
+    ? memberAreaT("completedBody")
+    : reviewRequest?.status === "REQUESTED" ? memberAreaT("requestedBody")
+      : reviewRequest?.status === "IN_REVIEW" ? memberAreaT("inReviewBody")
+        : reviewRequest ? memberAreaT("unknownBody")
+          : t(reviewRequired ? "review.priorityBody" : "review.body");
 
   async function requestReview() {
     setRequestState("submitting");
@@ -94,9 +109,10 @@ export function TreatmentResults({questionnaireId, firstName, outcome, healthCon
         {!reviewRequired && <div className="mt-4 flex flex-col items-start gap-1 min-[480px]:flex-row min-[480px]:flex-wrap min-[480px]:gap-x-5"><SourceLink href={sources.surmount}>{t("sources.surmount")}</SourceLink><SourceLink href={sources.step}>{t("sources.step")}</SourceLink><SourceLink href={sources.safety}>{t("sources.safety")}</SourceLink></div>}
       </section>
 
-      <section aria-labelledby="review-title" className={cn("rounded-[1.75rem] border p-6 min-[375px]:p-7 sm:p-9 lg:grid lg:grid-cols-[1fr_auto] lg:items-end lg:gap-10", reviewRequired ? "border-accent-strong/45 bg-pale-blush" : "border-primary/10 bg-surface")}>
-        <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-hover">{t("review.eyebrow")}</p><h2 id="review-title" className="mt-2 font-display text-3xl font-semibold leading-tight text-primary-dark">{reviewRequest ? t("review.requestedTitle") : t(reviewRequired ? "review.priorityTitle" : "review.title")}</h2><p className="mt-3 max-w-2xl leading-7 text-muted">{reviewRequest ? t(`review.status.${reviewRequest.status}`) : t(reviewRequired ? "review.priorityBody" : "review.body")}</p></div>
-        <div className="mt-6 min-w-0 lg:mt-0 lg:w-72">{reviewRequest ? <div className="rounded-2xl bg-background p-4"><div className="flex min-h-11 items-center gap-2 text-sm font-bold text-primary"><CheckCircle2 aria-hidden="true" size={19}/>{t("review.requested")}</div><p className="mt-1 text-sm text-muted">{t("review.languageRecorded", {language: t(`review.languages.${reviewRequest.reportLanguage}`)})}</p></div> : <><fieldset><legend className="text-sm font-bold text-primary-dark">{t("review.languageLabel")}</legend><p className="mt-1 text-xs leading-5 text-muted">{t("review.languageHelp")}</p><div className="mt-3 grid grid-cols-2 rounded-full border border-primary/15 bg-background p-1">{(["en", "es"] as const).map((language) => <button key={language} type="button" aria-pressed={reportLanguage === language} onClick={() => setReportLanguage(language)} className={cn("min-h-11 rounded-full px-3 text-sm font-bold transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2", reportLanguage === language ? "bg-primary text-white shadow-sm" : "text-primary hover:bg-mist-blue")}>{t(`review.languages.${language}`)}</button>)}</div></fieldset><Button size="large" onClick={() => void requestReview()} disabled={requestState === "submitting"} className="mt-4 w-full">{requestState === "submitting" ? <LoaderCircle className="mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" size={18}/> : <ArrowUpRight className="mr-2" aria-hidden="true" size={18}/>} {requestState === "submitting" ? t("review.submitting") : t("review.button")}</Button></>}</div>
+      <section aria-labelledby="review-title" className={cn("rounded-[1.75rem] border p-6 min-[375px]:p-7 sm:p-9 lg:grid lg:grid-cols-[1fr_auto] lg:items-end lg:gap-10", reportReady || reviewRequired ? "border-accent-strong/45 bg-pale-blush" : "border-primary/10 bg-surface")}>
+        <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-primary-hover">{t("review.eyebrow")}</p><h2 id="review-title" className="mt-2 font-display text-3xl font-semibold leading-tight text-primary-dark">{reviewTitle}</h2><p className="mt-3 max-w-2xl leading-7 text-muted">{reviewBody}</p></div>
+        <div className="mt-6 min-w-0 lg:mt-0 lg:w-72">{reviewRequest ? <div className="rounded-2xl bg-surface p-4"><div className="flex min-h-11 items-center gap-2 text-sm font-bold text-primary"><CheckCircle2 aria-hidden="true" size={19}/>{reportReady ? memberAreaT("completedTitle") : t("review.requested")}</div><p className="mt-1 text-sm text-muted">{t("review.languageRecorded", {language: t(`review.languages.${reviewRequest.reportLanguage}`)})}</p></div> : <><fieldset><legend className="text-sm font-bold text-primary-dark">{t("review.languageLabel")}</legend><p className="mt-1 text-xs leading-5 text-muted">{t("review.languageHelp")}</p><div className="mt-3 grid grid-cols-2 rounded-full border border-primary/15 bg-background p-1">{(["en", "es"] as const).map((language) => <button key={language} type="button" aria-pressed={reportLanguage === language} onClick={() => setReportLanguage(language)} className={cn("min-h-11 rounded-full px-3 text-sm font-bold transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2", reportLanguage === language ? "bg-primary text-white shadow-sm" : "text-primary hover:bg-mist-blue")}>{t(`review.languages.${language}`)}</button>)}</div></fieldset><Button size="large" onClick={() => void requestReview()} disabled={requestState === "submitting"} className="mt-4 w-full">{requestState === "submitting" ? <LoaderCircle className="mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" size={18}/> : <ArrowUpRight className="mr-2" aria-hidden="true" size={18}/>} {requestState === "submitting" ? t("review.submitting") : t("review.button")}</Button></>}</div>
+        {reportReady && reviewRequest?.reportId ? <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:col-span-2"><Link href={`/reports/${reviewRequest.reportId}`} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"><ClipboardCheck aria-hidden="true" size={18}/>{memberAreaT("viewReport")}</Link><Link href="/messages" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-primary/20 bg-surface px-5 text-sm font-bold text-primary transition-colors hover:bg-mist-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"><ArrowUpRight aria-hidden="true" size={18}/>{memberAreaT("sendMessage")}</Link></div> : null}
         {requestState === "error" && <p className="mt-4 rounded-xl bg-background px-4 py-3 text-sm font-semibold text-red-900 lg:col-span-2" role="alert">{t("review.error")}</p>}
       </section>
     </div>
