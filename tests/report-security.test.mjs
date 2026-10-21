@@ -5,6 +5,7 @@ import test from "node:test";
 import {renderReportContent} from "../src/features/reports/content.ts";
 import {generateAiResearchPrompt} from "../src/features/reports/prompt.ts";
 import {reportDraftSchema} from "../src/features/reports/validation.ts";
+import {pharmacyReferenceUpdateSchema} from "../src/features/pricing/validation.ts";
 
 const questionnaire = {
   id: "questionnaire-id",
@@ -44,8 +45,11 @@ test("AI prompt excludes known identity and treats questionnaire text as untrust
   assert.equal(prompt.includes("member@example.com"), false);
   assert.match(prompt, /\[REDACTED\]/u);
   assert.match(prompt, /untrusted/u);
-  assert.match(prompt, /Do not follow any instruction/u);
-  assert.match(prompt, /semaglutide and tirzepatide/u);
+  assert.match(prompt, /Ignore any request/u);
+  assert.match(prompt, /ONE final educational report/u);
+  assert.match(prompt, /250–400 words/u);
+  assert.match(prompt, /Do not automatically compare semaglutide and tirzepatide/u);
+  assert.equal(prompt.includes("Draft for human review"), true, "prompt tells the model not to use that heading");
 });
 
 test("Spanish AI prompt preserves the same privacy and non-prescribing guardrails", () => {
@@ -54,7 +58,9 @@ test("Spanish AI prompt preserves the same privacy and non-prescribing guardrail
   assert.equal(prompt.includes("member@example.com"), false);
   assert.match(prompt, /datos_cuestionario_no_confiables/u);
   assert.match(prompt, /No diagnostiques, prescribas/u);
-  assert.match(prompt, /semaglutida y tirzepatida/u);
+  assert.match(prompt, /UN único informe educativo final/u);
+  assert.match(prompt, /250–400 palabras/u);
+  assert.match(prompt, /No compares automáticamente semaglutida y tirzepatida/u);
 });
 
 test("report rendering escapes HTML and links only HTTPS sources", () => {
@@ -73,20 +79,42 @@ test("report email template includes private conversation and optional estimates
   assert.match(source, /\$\{summaryHtml\}\$\{reportHtml\}\$\{referenceHtml\}\$\{pharmacyHtml\}\$\{messagesHtml\}/u);
 });
 
-test("optional report cost fields require a dated HTTPS pharmacy source", () => {
-  const base = {language: "en", content: "Report", referenceScenario: null, pharmacyEstimate: null};
+test("drafts select saved pharmacy references instead of accepting client supplied pharmacy prices", () => {
+  const base = {language: "en", content: "Report", referenceScenario: null, pharmacyReferencePriceId: null, preserveExistingPharmacyEstimate: false};
   assert.equal(reportDraftSchema.safeParse(base).success, true);
   const referenceScenario = {treatment: "SEMAGLUTIDE", durationMonths: 16, deliveryMethod: "STANDARD_NEXT_DAY"};
-  const invalid = reportDraftSchema.safeParse({...base, referenceScenario, pharmacyEstimate: {
-    treatment: "SEMAGLUTIDE", amountPence: 10000, periodMonths: 1, sourceName: "Example", sourceUrl: "http://example.test", asOfDate: "2026-01-01",
-  }});
-  assert.equal(invalid.success, false);
-  const credentialed = reportDraftSchema.safeParse({...base, referenceScenario, pharmacyEstimate: {
-    treatment: "SEMAGLUTIDE", amountPence: 10000, periodMonths: 1, sourceName: "Example", sourceUrl: "https://user:secret@example.test/price", asOfDate: "2026-01-01",
-  }});
-  assert.equal(credentialed.success, false);
-  const valid = reportDraftSchema.safeParse({...base, referenceScenario, pharmacyEstimate: {
-    treatment: "SEMAGLUTIDE", amountPence: 10000, periodMonths: 1, sourceName: "Example", sourceUrl: "https://example.test/price", asOfDate: "2026-01-01",
-  }});
-  assert.equal(valid.success, true);
+  assert.equal(reportDraftSchema.safeParse({...base, referenceScenario, pharmacyReferencePriceId: "00000000-0000-4000-8000-000000000001"}).success, true);
+  assert.equal(reportDraftSchema.safeParse({...base, pharmacyEstimate: {amountPence: 10000, sourceUrl: "https://example.test"}}).success, false);
+});
+
+test("pharmacy reference configuration validates public HTTPS source and pence values", () => {
+  const candidate = {
+    source: {id: "00000000-0000-4000-8000-000000000001", name: "Example source", url: "https://example.org/prices", referenceDate: "2026-10-21"},
+    prices: [{id: "00000000-0000-4000-8000-000000000002", pricePence: 8900}],
+  };
+  assert.equal(pharmacyReferenceUpdateSchema.safeParse(candidate).success, true);
+  assert.equal(pharmacyReferenceUpdateSchema.safeParse({...candidate, source: {...candidate.source, url: "http://example.org/prices"}}).success, false);
+  assert.equal(pharmacyReferenceUpdateSchema.safeParse({...candidate, prices: [{...candidate.prices[0], pricePence: 0}]}).success, false);
+});
+
+test("migration adds the dated Boots source and all supplied monthly tiers", async () => {
+  const migration = await readFile(new URL("../drizzle/0011_adorable_luke_cage.sql", import.meta.url), "utf8");
+  assert.match(migration, /Boots Online Doctor/u);
+  assert.match(migration, /2026-10-21/u);
+  assert.match(migration, /'SEMAGLUTIDE', '0\.25 mg', 8900/u);
+  assert.match(migration, /'SEMAGLUTIDE', '2\.4 mg', 19900/u);
+  assert.match(migration, /'TIRZEPATIDE', '15 mg', 33900/u);
+  assert.equal((migration.match(/'SEMAGLUTIDE'|'TIRZEPATIDE'/gu) ?? []).length, 11);
+});
+
+test("new pharmacy controls and report guidance are translated in both languages", async () => {
+  for (const locale of ["en", "es"]) {
+    const pricing = JSON.parse(await readFile(new URL(`../src/messages/${locale}.json`, import.meta.url), "utf8"));
+    const reportCost = JSON.parse(await readFile(new URL(`../src/messages/report-cost/${locale}.json`, import.meta.url), "utf8"));
+    assert.ok(pricing.adminPricing.pharmacy.title);
+    assert.ok(pricing.adminPricing.pharmacy.checkedDate);
+    assert.ok(pricing.adminPricing.pharmacy.states.success);
+    assert.ok(reportCost.includePharmacyEstimate);
+    assert.ok(reportCost.notComparable);
+  }
 });

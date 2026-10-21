@@ -1,6 +1,6 @@
 "use client";
 
-import {ArrowLeft, Calculator, Check, CirclePoundSterling, LoaderCircle, Save, Truck} from "lucide-react";
+import {ArrowLeft, Calculator, Check, CirclePoundSterling, LoaderCircle, Save, Truck, Store} from "lucide-react";
 import {useLocale, useTranslations} from "next-intl";
 import {useMemo, useState, type FormEvent} from "react";
 
@@ -12,6 +12,7 @@ import {
   referenceMonthTiers,
   referenceTreatments,
   type PricingBook,
+  type PharmacyReferenceData,
   type PricingScenarios,
   type ReferenceDeliveryMethod,
   type ReferenceDuration,
@@ -40,7 +41,7 @@ function poundsToPence(value: string) {
   return Math.round(Number(value) * 100);
 }
 
-export function PricingManagement({initialPricing, initialScenarios}: {initialPricing: PricingBook; initialScenarios: PricingScenarios}) {
+export function PricingManagement({initialPricing, initialScenarios, initialPharmacyReferences}: {initialPricing: PricingBook; initialScenarios: PricingScenarios; initialPharmacyReferences: PharmacyReferenceData}) {
   const t = useTranslations("adminPricing");
   const adminNav = useTranslations("adminNav");
   const locale = useLocale();
@@ -108,8 +109,43 @@ export function PricingManagement({initialPricing, initialScenarios}: {initialPr
       <div className="sticky bottom-3 z-20 rounded-2xl border border-primary/10 bg-background/95 p-3 shadow-[0_14px_40px_rgba(20,42,71,0.14)] backdrop-blur sm:flex sm:items-center sm:justify-between sm:gap-5 sm:p-4"><div className="min-h-6" aria-live="polite">{message && <p className={`text-sm font-semibold ${message === "success" ? "text-primary" : "text-red-800"}`}>{message === "success" && <Check className="mr-1.5 inline" aria-hidden="true" size={17}/>} {t(`states.${message}`)}</p>}</div><button type="submit" disabled={saving} className="mt-2 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-primary px-6 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(30,58,95,0.18)] transition-[background-color,box-shadow] hover:bg-primary-hover hover:shadow-[0_10px_28px_rgba(30,58,95,0.24)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60 sm:mt-0 sm:w-auto">{saving ? <LoaderCircle className="mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" size={18}/> : <Save className="mr-2" aria-hidden="true" size={18}/>} {saving ? t("saving") : t("save")}</button></div>
     </form>
 
+    <PharmacyReferenceEditor initialData={initialPharmacyReferences}/>
+
     <section className="mt-10 border-t border-border pt-9" aria-labelledby="calculator-title"><div className="grid gap-7 lg:grid-cols-[0.9fr_1.1fr] lg:items-start"><div><div className="flex size-11 items-center justify-center rounded-xl bg-pale-blush text-primary"><Calculator aria-hidden="true" size={21}/></div><p className="mt-5 text-xs font-bold uppercase tracking-[0.16em] text-primary-hover">{t("calculatorEyebrow")}</p><h2 id="calculator-title" className="mt-2 font-display text-3xl font-semibold text-primary-dark">{t("calculatorTitle")}</h2><p className="mt-3 text-sm leading-6 text-muted">{t("calculatorBody")}</p><p className="mt-3 rounded-xl border border-accent-strong/25 bg-pale-blush/70 px-4 py-3 text-xs leading-5 text-muted">{t("calculatorDisclaimer")}</p></div><div className="rounded-2xl border border-border bg-surface p-5 sm:p-6"><div className="grid gap-5 sm:grid-cols-2"><ChoiceGroup label={t("durationLabel")}><div className="grid grid-cols-3 gap-2">{referenceDurations.map((item) => <ChoiceButton key={item} active={duration === item} onClick={() => setDuration(item)}>{t("duration", {months: item})}</ChoiceButton>)}</div></ChoiceGroup><ChoiceGroup label={t("deliveryLabel")}><div className="grid gap-2">{referenceDeliveryMethods.map((method) => <ChoiceButton key={method} active={deliveryMethod === method} onClick={() => setDeliveryMethod(method)}>{t(`delivery.${method}`)}</ChoiceButton>)}</div></ChoiceGroup></div><div className="mt-6 grid gap-3">{referenceTreatments.map((treatment) => {const result = scenarios[duration][treatment][deliveryMethod]; return <article key={treatment} className="rounded-xl bg-background p-4"><div className="flex items-baseline justify-between gap-4"><h3 className="font-display text-xl font-semibold text-primary-dark">{t(`treatments.${treatment}`)}</h3><p className="text-lg font-bold text-primary">{currency.format(result.totalCostPence / 100)}</p></div><dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm"><dt className="text-muted">{t("treatmentCost")}</dt><dd className="text-right font-semibold text-primary-dark">{currency.format(result.treatmentCostPence / 100)}</dd><dt className="text-muted">{t("deliveryCost")}</dt><dd className="text-right font-semibold text-primary-dark">{currency.format(result.deliveryCostPence / 100)}</dd></dl></article>;})}</div></div></div></section>
   </div></main>;
+}
+
+function PharmacyReferenceEditor({initialData}: {initialData: PharmacyReferenceData}) {
+  const t = useTranslations("adminPricing.pharmacy");
+  const locale = useLocale();
+  const [data, setData] = useState(initialData);
+  const [source, setSource] = useState(initialData.source);
+  const [prices, setPrices] = useState(() => Object.fromEntries(initialData.prices.map((price) => [price.id, (price.pricePence / 100).toFixed(2)])) as Record<string, string>);
+  const [state, setState] = useState<"success" | "error" | "validation">();
+  const [saving, setSaving] = useState(false);
+  const dateFormat = useMemo(() => new Intl.DateTimeFormat(locale, {dateStyle: "long", timeZone: "Europe/London"}), [locale]);
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setState(undefined);
+    const rows = data.prices.map((row) => ({id: row.id, pricePence: poundsToPence(prices[row.id] ?? "")}));
+    if (rows.some((row) => !Number.isInteger(row.pricePence) || row.pricePence < 1)) { setState("validation"); return; }
+    setSaving(true);
+    try {
+      const response = await fetch("/api/admin/pharmacy-reference", {method: "PUT", headers: {"content-type": "application/json"}, body: JSON.stringify({source: {id: source.id, name: source.name, url: source.url, referenceDate: source.referenceDate}, prices: rows})});
+      if (!response.ok) throw new Error();
+      const saved = await response.json() as PharmacyReferenceData;
+      setData(saved); setSource(saved.source); setPrices(Object.fromEntries(saved.prices.map((price) => [price.id, (price.pricePence / 100).toFixed(2)]))); setState("success");
+    } catch { setState("error"); } finally { setSaving(false); }
+  }
+
+  return <section className="mt-10 rounded-[1.5rem] border border-border bg-surface p-5 shadow-[0_8px_24px_rgba(20,42,71,0.04)] sm:p-7" aria-labelledby="pharmacy-reference-title">
+    <div className="flex items-start gap-4"><span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-pale-blush text-primary"><Store aria-hidden="true" size={21}/></span><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary-hover">{t("eyebrow")}</p><h2 id="pharmacy-reference-title" className="mt-1 font-display text-3xl font-semibold text-primary-dark">{t("title")}</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-muted">{t("description")}</p></div></div>
+    <form onSubmit={save} className="mt-6" noValidate>
+      <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm font-semibold text-primary-dark">{t("sourceName")}<input required maxLength={120} value={source.name} onChange={(event) => setSource({...source, name: event.target.value})} className="mt-1 min-h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/30"/></label><label className="text-sm font-semibold text-primary-dark">{t("sourceUrl")}<input required type="url" value={source.url} onChange={(event) => setSource({...source, url: event.target.value})} className="mt-1 min-h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/30"/></label><label className="text-sm font-semibold text-primary-dark">{t("checkedDate")}<input required type="date" value={source.referenceDate} onChange={(event) => setSource({...source, referenceDate: event.target.value})} className="mt-1 min-h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/30"/></label><p className="self-end text-xs leading-5 text-muted">{t("checkedNote", {date: dateFormat.format(new Date(`${source.referenceDate}T12:00:00Z`))})}</p></div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">{data.prices.map((price) => <label key={price.id} className="flex min-h-16 items-center justify-between gap-3 rounded-xl border border-border bg-background px-4 py-2"><span><span className="block text-sm font-semibold text-primary-dark">{t(`treatments.${price.treatment}`)} · {price.strength}</span><span className="text-xs text-muted">{t("period", {months: price.periodMonths})}</span></span><span className="relative w-28 shrink-0"><span className="pointer-events-none absolute inset-y-0 left-3 flex items-center font-semibold text-muted">£</span><input aria-label={t("priceFor", {treatment: t(`treatments.${price.treatment}`), strength: price.strength})} type="number" inputMode="decimal" min="0.01" max="10000" step="0.01" required value={prices[price.id]} onChange={(event) => setPrices({...prices, [price.id]: event.target.value})} className="h-11 w-full rounded-lg border border-border bg-surface pl-7 pr-2 text-right font-semibold text-primary-dark outline-none focus-visible:ring-2 focus-visible:ring-primary/30"/></span></label>)}</div>
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><p aria-live="polite" className={`min-h-6 text-sm font-semibold ${state === "error" || state === "validation" ? "text-red-800" : "text-primary"}`}>{state && t(`states.${state}`)}</p><button type="submit" disabled={saving} className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-primary px-6 text-sm font-semibold text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60 sm:w-auto">{saving ? <LoaderCircle className="mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" size={18}/> : <Save className="mr-2" aria-hidden="true" size={18}/>} {saving ? t("saving") : t("save")}</button></div>
+    </form>
+  </section>;
 }
 
 function PriceRow({id, label, value, onChange}: {id: string; label: string; value: string; onChange: (value: string) => void}) {

@@ -3,6 +3,7 @@ import {
   bigint,
   boolean,
   check,
+  date,
   index,
   integer,
   jsonb,
@@ -240,7 +241,9 @@ export const consultationReport = pgTable(
       pricingUpdatedAt: string;
     } | null>(),
     pharmacyEstimate: jsonb("pharmacy_estimate").$type<{
+      referencePriceId?: string;
       treatment: "SEMAGLUTIDE" | "TIRZEPATIDE";
+      strength?: string;
       amountPence: number;
       periodMonths: number;
       sourceName: string;
@@ -308,6 +311,31 @@ export const deliveryReferencePrice = pgTable(
     check("delivery_reference_price_pence_check", sql`${table.pricePence} between 0 and 1000000`),
   ],
 );
+
+export const pharmacyReferenceSource = pgTable("pharmacy_reference_source", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  referenceDate: date("reference_date").notNull(),
+  updatedAt: timestamp("updated_at", {withTimezone: true}).notNull().defaultNow(),
+  updatedByAdminId: uuid("updated_by_admin_id").references(() => user.id, {onDelete: "set null"}),
+});
+
+export const pharmacyReferencePrice = pgTable("pharmacy_reference_price", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sourceId: uuid("source_id").notNull().references(() => pharmacyReferenceSource.id, {onDelete: "cascade"}),
+  treatment: referenceTreatment("treatment").notNull(),
+  strength: text("strength").notNull(),
+  periodMonths: integer("period_months").notNull().default(1),
+  pricePence: integer("price_pence").notNull(),
+  updatedAt: timestamp("updated_at", {withTimezone: true}).notNull().defaultNow(),
+  updatedByAdminId: uuid("updated_by_admin_id").references(() => user.id, {onDelete: "set null"}),
+}, (table) => [
+  uniqueIndex("pharmacy_reference_price_source_treatment_strength_period_unique").on(table.sourceId, table.treatment, table.strength, table.periodMonths),
+  index("pharmacy_reference_price_treatment_strength_idx").on(table.treatment, table.strength),
+  check("pharmacy_reference_price_period_check", sql`${table.periodMonths} between 1 and 24`),
+  check("pharmacy_reference_price_pence_check", sql`${table.pricePence} between 1 and 1000000`),
+]);
 
 export const messageConversation = pgTable(
   "message_conversation",

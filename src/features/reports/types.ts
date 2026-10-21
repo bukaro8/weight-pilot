@@ -6,7 +6,7 @@ export type ReportSendStatus = "DRAFT" | "SENDING" | "ACCEPTED" | "DELIVERED" | 
 export type ReportTreatment = "SEMAGLUTIDE" | "TIRZEPATIDE";
 export type ReportReferenceScenario = {treatment: ReportTreatment; durationMonths: 6 | 12 | 16; deliveryMethod: "STANDARD_NEXT_DAY" | "GUARANTEED_NEXT_DAY"};
 export type ReportReferenceEstimate = ReportReferenceScenario & {treatmentCostPence: number; deliveryCostPence: number; totalCostPence: number; pricingUpdatedAt: string};
-export type ReportPharmacyEstimate = {treatment: ReportTreatment; amountPence: number; periodMonths: number; sourceName: string; sourceUrl: string; asOfDate: string};
+export type ReportPharmacyEstimate = {referencePriceId?: string; treatment: ReportTreatment; strength?: string; amountPence: number; periodMonths: number; sourceName: string; sourceUrl: string; asOfDate: string};
 
 export type ReportRecord = {
   id: string;
@@ -34,6 +34,7 @@ export type ReportWorkspaceData = {
   emailVerified: boolean;
   questionnaire: QuestionnaireData;
   assessment: AssessmentOutcome;
+  pharmacyReferences: import("@/features/pricing/types").PharmacyReferenceData;
   referenceEstimate: ReportReferenceEstimate | null;
   pharmacyEstimate: ReportPharmacyEstimate | null;
   messagesUrl: string;

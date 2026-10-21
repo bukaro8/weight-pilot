@@ -9,6 +9,6 @@ export default async function AdminPricingPage({params}: {params: Promise<{local
   const {locale} = await params;
   setRequestLocale(locale);
   await requireAdmin(locale, "/admin/pricing");
-  const {pricing, scenarios} = await getPricingManagementData();
-  return <PricingManagement initialPricing={pricing} initialScenarios={scenarios}/>;
+  const {pricing, scenarios, pharmacyReferences} = await getPricingManagementData();
+  return <PricingManagement initialPricing={pricing} initialScenarios={scenarios} initialPharmacyReferences={pharmacyReferences}/>;
 }

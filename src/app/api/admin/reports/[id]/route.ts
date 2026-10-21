@@ -26,7 +26,7 @@ export async function PUT(request: Request, {params}: {params: Promise<{id: stri
     return adminApiSuccess({report, prompt: workspace.prompt, previewHtml: workspace.previewHtml});
   } catch (error) {
     if (error instanceof Error && error.message === "UNTRUSTED_ORIGIN") return adminApiError("UNTRUSTED_ORIGIN", 403);
-    if (error instanceof ReportError) return adminApiError(error.code, error.code === "REPORT_NOT_FOUND" ? 404 : 409);
+    if (error instanceof ReportError) return adminApiError(error.code, error.code === "REPORT_NOT_FOUND" ? 404 : error.code === "REPORT_INVALID_PHARMACY" ? 422 : 409);
     return adminApiError("REPORT_SAVE_FAILED", 500);
   }
 }

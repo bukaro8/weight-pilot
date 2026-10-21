@@ -26,3 +26,9 @@ export type ReferenceCostBreakdown = {
 };
 
 export type PricingScenarios = Record<ReferenceDuration, Record<ReferenceTreatment, Record<ReferenceDeliveryMethod, ReferenceCostBreakdown>>>;
+
+export type PharmacyReferencePrice = {id: string; treatment: ReferenceTreatment; strength: string; periodMonths: number; pricePence: number};
+export type PharmacyReferenceData = {
+  source: {id: string; name: string; url: string; referenceDate: string; updatedAt: string};
+  prices: PharmacyReferencePrice[];
+};
