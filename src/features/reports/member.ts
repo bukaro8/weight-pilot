@@ -10,6 +10,7 @@ import {assessmentOutcomeSchema} from "@/features/assessment/validation";
 import {publicInvitationOrigin} from "@/features/invitations/sharing";
 import {serializeQuestionnaire} from "@/features/questionnaire/server";
 import {renderGuidanceReportEmail} from "@/features/reports/email";
+import {getClearTreatmentSuggestion} from "@/features/reports/content";
 import {buildEmailSummary} from "@/features/reports/summary";
 import {isMemberReportVisible} from "@/features/member-area/report-state";
 
@@ -102,6 +103,7 @@ export async function getMemberAvailableReport(userId: string, reportId: string)
     availableAt: availableAt.toISOString(),
     assessmentReference: assessmentReference(record.report.id, availableAt),
     emailHtml: email.html,
+    recommendedTreatment: getClearTreatmentSuggestion(record.report.content),
     savingsComparison: record.report.savingsComparisonEnabled ? record.report.savingsComparison : null,
   };
 }

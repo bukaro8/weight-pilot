@@ -5,8 +5,10 @@ import {useTranslations} from "next-intl";
 import {ArrowLeft, MessageCircle} from "lucide-react";
 
 import {Link} from "@/i18n/navigation";
+import {TreatmentCard} from "@/components/treatments/treatment-card";
+import type {Treatment} from "@/features/treatments/presentation";
 
-export function MemberReportReader({emailHtml, assessmentReference, availableAt, locale}: {emailHtml: string; assessmentReference: string; availableAt: string; locale: "en" | "es"}) {
+export function MemberReportReader({emailHtml, assessmentReference, availableAt, locale, reportId, recommendedTreatment, recommendedPricePence}: {emailHtml: string; assessmentReference: string; availableAt: string; locale: "en" | "es"; reportId: string; recommendedTreatment: Treatment | null; recommendedPricePence: number | null}) {
   const t = useTranslations("memberArea.reports");
   const tt = useTranslations("treatments");
   const [height, setHeight] = useState(900);
@@ -26,13 +28,6 @@ export function MemberReportReader({emailHtml, assessmentReference, availableAt,
     </section>
 
     <div className="mx-auto max-w-5xl space-y-6 px-4 py-7 sm:px-6 sm:py-10 lg:px-10">
-      <section aria-labelledby="question-title" className="rounded-[1.5rem] border border-accent-strong/35 bg-pale-blush p-5 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-6">
-        <div className="min-w-0"><h2 id="question-title" className="font-display text-2xl font-semibold text-primary-dark">{t("questionAbout")}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-muted">{t("questionAboutBody")}</p></div>
-        <Link href="/messages" className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-white shadow-[0_8px_24px_rgba(30,58,95,0.16)] transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:mt-0 sm:w-auto sm:shrink-0"><MessageCircle aria-hidden="true" size={18}/>{t("openMessages")}</Link>
-      </section>
-
-      <section className="rounded-[1.5rem] border border-primary/10 bg-surface p-5 sm:p-6"><h2 className="font-display text-2xl text-primary-dark">{tt("dashboardNextTitle")}</h2><p className="mt-2 leading-6 text-muted">{tt("dashboardNextBody")}</p><Link href="/treatments" className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-primary px-5 font-semibold text-white hover:bg-primary-hover sm:w-auto">{tt("viewTreatments")}</Link></section>
-
       <section aria-label={t("contentTitle")} className="overflow-hidden rounded-[1.5rem] border border-border bg-surface shadow-[0_12px_38px_rgba(20,42,71,0.07)]">
         <iframe
           title={t("contentTitle")}
@@ -45,6 +40,17 @@ export function MemberReportReader({emailHtml, assessmentReference, availableAt,
           className="block w-full border-0"
           style={{height}}
         />
+      </section>
+
+      {recommendedTreatment ? <section aria-labelledby="recommended-treatment-title" className="rounded-[1.5rem] border border-primary/10 bg-mist-blue/55 p-4 sm:p-7">
+        <div className="mx-auto max-w-2xl"><p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">{t("recommendedEyebrow")}</p><h2 id="recommended-treatment-title" className="mt-2 font-display text-2xl font-semibold text-primary-dark sm:text-3xl">{t("recommendedTitle", {treatment: tt(recommendedTreatment === "SEMAGLUTIDE" ? "semaglutide" : "tirzepatide")})}</h2><p className="mt-2 mb-5 text-sm leading-6 text-muted">{t("recommendedBody")}</p><TreatmentCard treatment={recommendedTreatment} pricePence={recommendedPricePence} locale={locale} source="report" reportId={reportId}/></div>
+      </section> : null}
+
+      <section className="rounded-[1.5rem] border border-primary/10 bg-surface p-5 sm:p-6"><h2 className="font-display text-2xl text-primary-dark">{t("moreTreatmentsTitle")}</h2><p className="mt-2 leading-6 text-muted">{t("moreTreatmentsBody")}</p><Link href="/treatments" className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-full border border-primary/20 bg-surface px-5 font-semibold text-primary transition-colors hover:bg-mist-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary sm:w-auto">{t("moreTreatmentsAction")}</Link></section>
+
+      <section aria-labelledby="question-title" className="rounded-[1.5rem] border border-accent-strong/35 bg-pale-blush p-5 sm:flex sm:items-center sm:justify-between sm:gap-6 sm:p-6">
+        <div className="min-w-0"><h2 id="question-title" className="font-display text-2xl font-semibold text-primary-dark">{t("questionAbout")}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-muted">{t("questionAboutBody")}</p></div>
+        <Link href="/messages" className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-white shadow-[0_8px_24px_rgba(30,58,95,0.16)] transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:mt-0 sm:w-auto sm:shrink-0"><MessageCircle aria-hidden="true" size={18}/>{t("openMessages")}</Link>
       </section>
       <p className="text-center text-xs leading-5 text-muted">{t("privateReport")}</p>
     </div>

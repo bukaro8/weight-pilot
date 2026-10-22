@@ -4,7 +4,7 @@ import {readFileSync} from "node:fs";
 import {registerHooks} from "node:module";
 import {canBrowseTreatments, canChangeRequestStatus} from "../src/features/treatments/policy.ts";
 import {createTreatmentRequestSchema, treatmentDecisionSchema} from "../src/features/treatments/validation.ts";
-import {treatmentFromPath, treatmentItems} from "../src/features/treatments/presentation.ts";
+import {formatPenceWithPoundSymbol, treatmentCardHref, treatmentFromPath, treatmentItems} from "../src/features/treatments/presentation.ts";
 import {renderTreatmentApprovalEmail, renderTreatmentRequestNotification} from "../src/features/treatments/email-template.ts";
 import {catalogueDosePriceRows, catalogueDoseStages} from "../src/features/treatments/dose-stages.ts";
 import {getClearTreatmentSuggestion} from "../src/features/reports/content.ts";
@@ -21,6 +21,20 @@ test("catalogue requires verified active USER and an available report", () => {
 test("only two generic treatments are routable", () => {
   assert.deepEqual(treatmentItems, ["SEMAGLUTIDE", "TIRZEPATIDE"]);
   assert.equal(treatmentFromPath("retatrutide"), null);
+});
+
+test("catalogue cards lead to details while report cards keep their report in the request flow", () => {
+  assert.equal(treatmentCardHref("SEMAGLUTIDE", "catalogue"), "/treatments/semaglutide");
+  assert.equal(treatmentCardHref("TIRZEPATIDE", "report", "report-123"), "/treatments/tirzepatide/request?reportId=report-123");
+  assert.equal(formatPenceWithPoundSymbol(3200, "en"), "£32.00");
+  assert.equal(formatPenceWithPoundSymbol(3600, "es"), "£36,00");
+  for (const language of ["en", "es"]) {
+    const copy = JSON.parse(readFileSync(new URL(`../src/messages/treatments/${language}.json`, import.meta.url)));
+    assert.match(copy.cardReference, /\{dose\}.*\{price\}/);
+    assert.ok(copy.moreInfo && copy.getItNow && copy.getItNowNote);
+    const reports = JSON.parse(readFileSync(new URL(`../src/messages/member-area/${language}.json`, import.meta.url))).reports;
+    assert.ok(reports.recommendedTitle && reports.moreTreatmentsTitle);
+  }
 });
 
 test("illustrative dose labels map to configured tiers without treating tiers as strengths", () => {
