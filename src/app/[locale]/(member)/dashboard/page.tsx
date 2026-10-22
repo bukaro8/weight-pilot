@@ -45,6 +45,21 @@ export default async function MemberDashboardPage({params}: {params: Promise<{lo
         <div className="min-w-0"><h2 className="font-display text-xl font-semibold text-primary-dark">{t(reportState === "REQUESTED" ? "requestedTitle" : "preparingTitle")}</h2><p className="mt-1 text-sm leading-6 text-muted">{t(reportState === "REQUESTED" ? "requestedBody" : "preparingBody")}</p></div>
       </section> : null}
 
+      <section aria-labelledby="invite-friends-title" className="grid min-w-0 gap-6 overflow-hidden rounded-[1.75rem] border border-accent-strong/40 bg-pale-blush p-5 shadow-[0_12px_36px_rgba(20,42,71,0.06)] sm:p-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] lg:items-center lg:gap-10">
+        <div className="min-w-0">
+          <div className="flex size-12 items-center justify-center rounded-2xl bg-primary text-white"><UsersRound aria-hidden="true" size={23}/></div>
+          <p className="mt-5 text-xs font-bold uppercase tracking-[0.16em] text-primary-hover">{t("inviteEyebrow")}</p>
+          <h2 id="invite-friends-title" className="mt-2 font-display text-3xl font-semibold leading-tight text-primary-dark sm:text-4xl">{t("inviteTitle")}</h2>
+          <p className="mt-4 max-w-xl text-sm leading-6 text-muted sm:text-base">{t("inviteBody")}</p>
+          <Link href="/invitations" className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-primary px-6 text-sm font-bold text-white transition-colors motion-reduce:transition-none hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:w-auto">{t("inviteAction")}<ArrowRight aria-hidden="true" size={18}/></Link>
+        </div>
+        <div className="min-w-0 rounded-2xl border border-primary/10 bg-surface/85 p-4 sm:p-6">
+          <h3 className="font-display text-xl font-semibold text-primary-dark">{t("inviteHowTitle")}</h3>
+          <ol className="mt-4 space-y-4">{(["inviteStepCreate", "inviteStepShare", "inviteStepJoin"] as const).map((step, index) => <li key={step} className="flex items-start gap-3 text-sm leading-6 text-foreground"><span aria-hidden="true" className="flex size-8 shrink-0 items-center justify-center rounded-full bg-mist-blue text-xs font-bold text-primary">{index + 1}</span><span className="min-w-0 pt-1">{t(step)}</span></li>)}</ol>
+          <p className="mt-5 border-t border-border pt-4 text-xs leading-5 text-muted">{t("inviteNote")}</p>
+        </div>
+      </section>
+
       {data.latestReport ? <section className="rounded-[1.5rem] border border-primary/10 bg-surface p-5 sm:p-7"><h2 className="font-display text-2xl text-primary-dark">{tt("dashboardNextTitle")}</h2><p className="mt-2 max-w-2xl leading-6 text-muted">{tt("dashboardNextBody")}</p><div className="mt-5 flex flex-col gap-3 sm:flex-row"><Link href="/treatments" className="inline-flex min-h-12 items-center justify-center rounded-full bg-primary px-6 font-semibold text-white hover:bg-primary-hover">{tt("viewTreatments")}</Link><Link href="/requests" className="inline-flex min-h-12 items-center justify-center rounded-full border border-primary/20 px-6 font-semibold text-primary hover:bg-mist-blue">{tt("myRequests")}</Link></div></section> : null}
 
       <section aria-label={t("quickLinks")} className="grid gap-4 md:grid-cols-2">
