@@ -127,6 +127,13 @@
       "when": 1792624101202,
       "tag": "0017_perfect_stellaris",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792673028713,
+      "tag": "0018_free_cammi",
+      "breakpoints": true
     }
   ]
 }

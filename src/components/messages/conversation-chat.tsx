@@ -5,6 +5,7 @@ import {ArrowUp, Check, LoaderCircle, MessageCircle, RefreshCw} from "lucide-rea
 import {useTranslations} from "next-intl";
 import type {Locale} from "@/i18n/routing";
 import type {MessageItem} from "@/features/messages/types";
+import {notificationsChangedEvent} from "@/components/navigation/use-navigation-notifications";
 
 type Props = {
   locale: Locale;
@@ -33,7 +34,7 @@ export function ConversationChat({locale, apiPath, readPath, initialMessages, in
   const markRead = useCallback(async () => {
     try {
       const response = await fetch(readPath, {method: "POST", headers: {"content-type": "application/json"}, body: "{}", cache: "no-store"});
-      if (response.ok) setUnreadCount(0);
+      if (response.ok) { setUnreadCount(0); window.dispatchEvent(new Event(notificationsChangedEvent)); }
     } catch { /* Polling can retry when the connection returns. */ }
   }, [readPath]);
 
@@ -53,10 +54,10 @@ export function ConversationChat({locale, apiPath, readPath, initialMessages, in
   }, [apiPath, markRead]);
 
   useEffect(() => {
-    void fetch(readPath, {method: "POST", headers: {"content-type": "application/json"}, body: "{}", cache: "no-store"}).catch(() => undefined);
+    const initialRead = window.setTimeout(() => void markRead(), 0);
     const timer = window.setInterval(() => void refresh(), 5000);
-    return () => window.clearInterval(timer);
-  }, [readPath, refresh]);
+    return () => { window.clearTimeout(initialRead); window.clearInterval(timer); };
+  }, [markRead, refresh]);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({behavior: "smooth", block: "end"}); }, [messages.length]);
 

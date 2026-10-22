@@ -18,6 +18,7 @@
     "test:invitation-sharing": "node --no-warnings --experimental-strip-types --test tests/invitation-sharing.test.mjs",
     "test:messages": "node --no-warnings --experimental-strip-types --test tests/messages.test.mjs",
     "test:treatments": "node --no-warnings --experimental-strip-types --test tests/treatment-requests.test.mjs",
+    "test:notifications": "node --no-warnings --experimental-strip-types --test tests/notification-badges.test.mjs",
     "test:release": "node --no-warnings --experimental-strip-types --test tests/release-preparation.test.mjs",
     "db:generate": "drizzle-kit generate",
     "test:migrations": "node --test tests/migration-startup.test.mjs",

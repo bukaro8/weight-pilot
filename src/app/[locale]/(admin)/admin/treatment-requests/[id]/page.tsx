@@ -5,6 +5,7 @@ import type {Locale} from "@/i18n/routing";
 import {requireAdmin} from "@/lib/authorization";
 import {getAdminRequest} from "@/features/treatments/server";
 import {AdminRequestEditor} from "@/components/treatments/admin-request-editor";
+import {MarkNotificationViewed} from "@/components/navigation/mark-notification-viewed";
 
 export default async function AdminRequestPage({params}: {params: Promise<{locale: Locale; id: string}>}) {
   const {locale, id} = await params;
@@ -16,7 +17,7 @@ export default async function AdminRequestPage({params}: {params: Promise<{local
   const t = await getTranslations("treatments");
   const date = (value: Date) => new Intl.DateTimeFormat(locale, {dateStyle: "medium", timeStyle: "short"}).format(value);
 
-  return <main id="main-content" className="mx-auto max-w-5xl px-4 py-9 sm:px-6 lg:px-10">
+  return <main id="main-content" className="mx-auto max-w-5xl px-4 py-9 sm:px-6 lg:px-10"><MarkNotificationViewed kind="adminRequest" id={id}/>
     <Link href="/admin/treatment-requests" className="inline-flex min-h-11 items-center font-semibold text-primary underline underline-offset-4">← {t("adminTitle")}</Link>
     <h1 className="mt-5 font-display text-4xl text-primary-dark">{memberName}</h1>
     <p className="mt-2 break-words text-muted">{memberEmail} · {t(request.treatment === "SEMAGLUTIDE" ? "semaglutide" : "tirzepatide")} · {t(request.status)}</p>

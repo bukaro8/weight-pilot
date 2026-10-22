@@ -89,6 +89,7 @@ export async function updateTreatmentRequest(adminId: string, requestId: string,
       declineReason: input.status === "DECLINED" ? input.declineReason : null,
       approvedTreatment: input.status === "APPROVED_FOR_NEXT_STEPS" ? input.approvedTreatment : null,
       approvedStrength: input.status === "APPROVED_FOR_NEXT_STEPS" ? input.approvedStrength : null,
+      ...(changed ? {memberViewedAt: null} : {}),
       updatedAt: new Date(),
     }).where(eq(treatmentAccessRequest.id, requestId)).returning();
     if (changed) await tx.insert(treatmentRequestStatusEvent).values({requestId, status: input.status, changedByUserId: adminId});
