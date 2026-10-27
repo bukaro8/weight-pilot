@@ -6,7 +6,7 @@ const handleLocaleRouting = createMiddleware(routing);
 const handleSerumRouting = createMiddleware({...routing, localePrefix: "as-needed", localeDetection: false});
 
 export default function proxy(request: NextRequest) {
-  if (/^\/(?:en\/|es\/)?serums\/ghk-cu\/?$/.test(request.nextUrl.pathname)) return handleSerumRouting(request);
+  if (/^\/serums\/ghk-cu\/?$/.test(request.nextUrl.pathname)) return handleSerumRouting(request);
   // The unprefixed root is resolved server-side so a signed-in member's saved
   // language can be honoured without changing explicit /en or /es URLs.
   if (request.nextUrl.pathname === "/") return NextResponse.next();

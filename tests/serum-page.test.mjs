@@ -51,8 +51,8 @@ test("only the serum QR route uses unprefixed English; existing locale routing i
   const pattern = proxy.match(/if \((\/\^.*?\$\/)\.test\(request\.nextUrl\.pathname\)\) return handleSerumRouting/);
   assert.ok(pattern);
   const route = new RegExp(pattern[1].slice(1, -1));
-  for (const path of ["/serums/ghk-cu", "/en/serums/ghk-cu", "/es/serums/ghk-cu", "/serums/ghk-cu/"]) assert.ok(route.test(path));
-  for (const path of ["/en/admin", "/dashboard", "/en", "/serums/ghk-cu/other", "/serums/other"]) assert.equal(route.test(path), false);
+  for (const path of ["/serums/ghk-cu", "/serums/ghk-cu/"]) assert.ok(route.test(path));
+  for (const path of ["/en/serums/ghk-cu", "/es/serums/ghk-cu", "/en/admin", "/dashboard", "/en", "/serums/ghk-cu/other", "/serums/other"]) assert.equal(route.test(path), false);
 });
 
 test("reference-inspired decoration stays page-scoped and does not replace the supplied instructions", () => {

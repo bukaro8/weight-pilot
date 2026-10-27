@@ -6,6 +6,13 @@ const nextConfig: NextConfig = {
   output: "standalone",
   cacheComponents: true,
   partialPrefetching: true,
+  async redirects() {
+    return [
+      {source: "/serum/ghk-cu", destination: "/serums/ghk-cu", permanent: true},
+      {source: "/en/serum/ghk-cu", destination: "/serums/ghk-cu", permanent: true},
+      {source: "/es/serum/ghk-cu", destination: "/es/serums/ghk-cu", permanent: true},
+    ];
+  },
   turbopack: {
     rules: {
       "*.css": {
