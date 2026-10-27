@@ -11,6 +11,10 @@ const nextConfig: NextConfig = {
       {source: "/serum/ghk-cu", destination: "/serums/ghk-cu", permanent: true},
       {source: "/en/serum/ghk-cu", destination: "/serums/ghk-cu", permanent: true},
       {source: "/es/serum/ghk-cu", destination: "/es/serums/ghk-cu", permanent: true},
+      {source: "/serums/ghk-uk", destination: "/serums/ghk-cu", permanent: true},
+      {source: "/serum/ghk-uk", destination: "/serums/ghk-cu", permanent: true},
+      {source: "/:locale(en|es)/serums/ghk-uk", destination: "/:locale/serums/ghk-cu", permanent: true},
+      {source: "/:locale(en|es)/serum/ghk-uk", destination: "/:locale/serums/ghk-cu", permanent: true},
     ];
   },
   turbopack: {

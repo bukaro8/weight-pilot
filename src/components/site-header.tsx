@@ -14,11 +14,11 @@ import {NotificationBadge} from "@/components/navigation/notification-badge";
 import {useNavigationNotifications} from "@/components/navigation/use-navigation-notifications";
 import {memberNavigationCount} from "@/features/notifications/policy";
 
-const memberLinks = [["/dashboard", "dashboard"], ["/consultations", "consultations"], ["/reports", "reports"], ["/treatments", "treatments"], ["/requests", "requests"], ["/invitations", "invitations"], ["/messages", "messages"]] as const;
+const memberLinks = [["/dashboard", "dashboard"], ["/consultations", "consultations"], ["/reports", "reports"], ["/treatments", "treatments"], ["/requests", "requests"], ["/invitations", "invitations"], ["/messages", "messages"], ["/serums/ghk-cu", "serums"]] as const;
 const desktopPrimaryMemberLinks = [memberLinks[0], memberLinks[1], memberLinks[2], memberLinks[6]] as const;
-const desktopMoreMemberLinks = [memberLinks[3], memberLinks[4], memberLinks[5]] as const;
-const adminLinks = [["/", "home"], ["/admin", "admin"]] as const;
-const publicLinks = [["/", "home"]] as const;
+const desktopMoreMemberLinks = [memberLinks[3], memberLinks[4], memberLinks[5], memberLinks[7]] as const;
+const adminLinks = [["/", "home"], ["/admin", "admin"], ["/serums/ghk-cu", "serums"]] as const;
+const publicLinks = [["/", "home"], ["/serums/ghk-cu", "serums"]] as const;
 
 export function SiteHeader() {
   const t = useTranslations("nav");
