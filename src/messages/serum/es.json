@@ -1,0 +1,58 @@
+{
+  "title": "Sérum facial GHK-Cu",
+  "description": "Cómo usar tu sérum facial GHK-Cu de 30 mL, con información sobre sus ingredientes e instrucciones de conservación.",
+  "eyebrow": "Guía de tu sérum",
+  "collection": "Copper Renew",
+  "size": "30 mL",
+  "formula": "1% GHK-Cu • 2% Ectoína • 0,3% Ácido hialurónico",
+  "imageAlt": "Sérum facial GHK-Cu de WeightPilot, frasco de 30 mL con cuentagotas",
+  "howTo": "Cómo usarlo",
+  "night": "Rutina de noche",
+  "frequency": "Una vez al día · Solo necesitas una capa fina",
+  "steps": {
+    "wash": "Lava y seca tu rostro.",
+    "apply": "Aplica aproximadamente 2–4 gotas del sérum en el rostro. Si lo deseas, también puedes aplicarlo en el cuello.",
+    "spread": "Extiéndelo suavemente sobre la piel.",
+    "wait": "Espera aproximadamente 30–60 segundos para que el sérum se absorba.",
+    "moisturise": "Aplica después tu crema hidratante habitual."
+  },
+  "activesTitle": "Qué hace cada ingrediente",
+  "actives": {
+    "copper": {
+      "name": "GHK-Cu — 1%",
+      "body": "GHK-Cu es un péptido de cobre estudiado por su papel en la reparación y remodelación de la piel, y por su apoyo a los procesos implicados en la producción de colágeno y elastina."
+    },
+    "ectoin": {
+      "name": "Ectoína — 2%",
+      "body": "La ectoína ayuda a mantener la barrera cutánea, la hidratación y la retención de humedad. Puede ayudar a que la piel se sienta más confortable cuando está seca o estresada."
+    },
+    "hyaluronic": {
+      "name": "Ácido hialurónico — 0,3%",
+      "body": "El ácido hialurónico atrae y retiene agua en la piel, ayudando a darle un aspecto más suave, hidratado y relleno."
+    }
+  },
+  "togetherTitle": "Por qué se combinan estos ingredientes",
+  "togetherBody": "La fórmula es deliberadamente sencilla: cada activo principal cumple una función diferente.",
+  "roles": {
+    "copper": "GHK-Cu: apoyo a la reparación y remodelación de la piel",
+    "ectoin": "Ectoína: apoyo a la barrera cutánea y retención de humedad",
+    "hyaluronic": "Ácido hialurónico: hidratación y aspecto más relleno"
+  },
+  "handsTitle": "Uso en el dorso de las manos",
+  "handsBody": "Si queda sérum en tus manos después de aplicarlo en el rostro, extiéndelo sobre el dorso de las manos y aplica después crema hidratante.",
+  "ingredientsTitle": "Ingredientes",
+  "ingredients": "Aqua, GHK-Cu, Ectoin, Sodium Hyaluronate, Phenoxyethanol, Ethylhexylglycerin.",
+  "preservative": "Phenoxyethanol y Ethylhexylglycerin proceden del conservante Plantaserve E utilizado en la formulación.",
+  "storageTitle": "Conservación",
+  "storage": {
+    "closed": "Mantén el frasco bien cerrado.",
+    "cool": "Guárdalo en un lugar fresco y seco.",
+    "sunlight": "Mantenlo alejado de la luz solar directa y del calor excesivo."
+  },
+  "notesTitle": "Notas básicas de uso",
+  "notes": {
+    "external": "Solo para uso externo.",
+    "eyes": "Evita el contacto directo con los ojos.",
+    "skin": "No lo apliques sobre piel lesionada."
+  }
+}

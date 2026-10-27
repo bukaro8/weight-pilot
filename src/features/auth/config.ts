@@ -25,5 +25,23 @@ export function withLocalAuthClientIp(request: Request, baseURL: string | undefi
   // Next.js does not expose the socket address to Better Auth. A Compose app
   // published only on loopback has one legitimate local client bucket.
   headers.set("x-forwarded-for", "127.0.0.1");
-  return new Request(request, {headers});
+
+  // Next.js 16 can provide a proxy-backed route-handler Request. Passing that
+  // object as the Request constructor's input makes the native constructor
+  // inspect its private state using the proxy as the receiver, which throws.
+  // Construct from the URL instead and copy the standard request fields.
+  const method = request.method;
+  const body = method === "GET" || method === "HEAD" ? undefined : request.body;
+  const init: RequestInit & {duplex?: "half"} = {
+    method,
+    headers,
+    signal: request.signal,
+  };
+
+  if (body) {
+    init.body = body;
+    init.duplex = "half";
+  }
+
+  return new Request(request.url, init);
 }

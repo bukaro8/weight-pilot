@@ -1,0 +1,58 @@
+{
+  "title": "GHK-Cu Facial Serum",
+  "description": "How to use your 30 mL GHK-Cu Facial Serum, with ingredient information and storage instructions.",
+  "eyebrow": "Your serum guide",
+  "collection": "Copper Renew",
+  "size": "30 mL",
+  "formula": "1% GHK-Cu • 2% Ectoin • 0.3% Hyaluronic Acid",
+  "imageAlt": "WeightPilot GHK-Cu Facial Serum, 30 mL bottle with dropper",
+  "howTo": "How to use",
+  "night": "Night routine",
+  "frequency": "Once daily · Only a thin layer is required",
+  "steps": {
+    "wash": "Wash your face and dry it.",
+    "apply": "Apply approximately 2–4 drops of the serum to your face. You can also apply it to your neck if desired.",
+    "spread": "Spread gently over the skin.",
+    "wait": "Allow approximately 30–60 seconds for the serum to absorb.",
+    "moisturise": "Apply your normal moisturiser afterwards."
+  },
+  "activesTitle": "What each ingredient does",
+  "actives": {
+    "copper": {
+      "name": "GHK-Cu — 1%",
+      "body": "GHK-Cu is a copper peptide studied for its role in skin repair and remodelling, and for supporting processes involved in collagen and elastin production."
+    },
+    "ectoin": {
+      "name": "Ectoin — 2%",
+      "body": "Ectoin helps support the skin barrier, hydration and moisture retention. It can help skin feel more comfortable when dry or stressed."
+    },
+    "hyaluronic": {
+      "name": "Hyaluronic Acid — 0.3%",
+      "body": "Hyaluronic acid attracts and retains water in the skin, helping give it a smoother, more hydrated and plumper appearance."
+    }
+  },
+  "togetherTitle": "Why these ingredients are together",
+  "togetherBody": "The formula is deliberately simple, with each main active serving a different purpose.",
+  "roles": {
+    "copper": "GHK-Cu: skin repair and remodelling support",
+    "ectoin": "Ectoin: barrier support and moisture retention",
+    "hyaluronic": "Hyaluronic Acid: hydration and plumping"
+  },
+  "handsTitle": "Use on the backs of the hands",
+  "handsBody": "If there is serum left on your hands after applying it to your face, rub it over the backs of your hands and follow with moisturising cream.",
+  "ingredientsTitle": "Ingredients",
+  "ingredients": "Aqua, GHK-Cu, Ectoin, Sodium Hyaluronate, Phenoxyethanol, Ethylhexylglycerin.",
+  "preservative": "Phenoxyethanol and Ethylhexylglycerin come from the Plantaserve E preservative used in the formulation.",
+  "storageTitle": "Storage",
+  "storage": {
+    "closed": "Keep the bottle tightly closed.",
+    "cool": "Store in a cool, dry place.",
+    "sunlight": "Keep away from direct sunlight and excessive heat."
+  },
+  "notesTitle": "Basic use notes",
+  "notes": {
+    "external": "External use only.",
+    "eyes": "Avoid direct contact with the eyes.",
+    "skin": "Do not apply to broken skin."
+  }
+}

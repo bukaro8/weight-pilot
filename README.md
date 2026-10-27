@@ -6,6 +6,14 @@ WeightPilot is a bilingual Next.js application for a private, personalised weigh
 
 Requirements: Node.js 22+, npm, and PostgreSQL when working on database-backed features.
 
+The example `DATABASE_URL` uses `db`, a hostname available only to containers on the Compose database network. With `.env` configured as described below, run the application and database together:
+
+```bash
+docker compose up -d --build db app
+```
+
+If running Next.js directly on the host, configure `DATABASE_URL` for a PostgreSQL server reachable from the host before running migrations or starting the app. The Compose PostgreSQL service does not publish a host port. Keep the Compose URL using `db`; do not change it to `localhost` inside the app container. Run only one WeightPilot server on port 3000; otherwise `localhost` may reach the host dev server while `127.0.0.1` reaches the Docker app.
+
 ```bash
 cp .env.example .env.local
 npm ci

@@ -1,0 +1,159 @@
+/* Page-prefixed selectors keep the existing Tailwind loader and other routes unchanged. */
+.wp-serum-page {
+  --serum-copper: #91472f;
+  background: radial-gradient(ellipse at 100% 22%, var(--pale-blush), transparent 45%), var(--background);
+}
+
+.wp-serum-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 80% 25%, #fff 10%, transparent 60%), linear-gradient(125deg, var(--background) 30%, var(--pale-blush));
+  border-bottom: 1px solid var(--accent);
+}
+
+.wp-serum-hero::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  bottom: -5.5rem;
+  left: -10%;
+  width: 120%;
+  height: 8rem;
+  border-radius: 50% 50% 0 0;
+  border-top: 10px solid var(--accent-strong);
+  box-shadow: 0 -3px 0 var(--accent), 0 -6px 0 #fff;
+  background: linear-gradient(110deg, var(--primary-dark), var(--primary-hover));
+  transform: rotate(-5deg);
+}
+
+.wp-serum-copper { color: var(--serum-copper); }
+
+.wp-serum-collection {
+  color: var(--serum-copper);
+  font-size: clamp(3rem, 10vw, 6.75rem);
+  line-height: .91;
+  letter-spacing: -.055em;
+  max-width: 5.8ch;
+  text-wrap: balance;
+}
+
+.wp-serum-product {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 16rem;
+}
+
+.wp-serum-product::before {
+  content: "";
+  position: absolute;
+  width: 11rem;
+  height: 11rem;
+  border: 1px solid var(--accent-strong);
+  border-radius: 50%;
+  box-shadow: 0 0 0 20px #e9c9c026, 0 0 0 40px #e9c9c014;
+}
+
+.wp-serum-product-image {
+  position: relative;
+  width: min(12rem, 53vw);
+  height: 16rem;
+  max-width: none;
+  flex-shrink: 0;
+  mix-blend-mode: multiply;
+}
+
+.wp-serum-panel {
+  border: 1px solid #d4a09440;
+  border-radius: 1.5rem;
+  background: #ffffffed;
+  box-shadow: 0 12px 40px #1e3a5f08, inset 0 1px 0 #fff;
+}
+
+.wp-serum-heading {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.wp-serum-heading::after {
+  content: "";
+  width: 2.5rem;
+  height: 2px;
+  flex-shrink: 0;
+  background: var(--accent-strong);
+}
+
+.wp-serum-orb {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 4.25rem;
+  height: 4.25rem;
+  flex-shrink: 0;
+  border: 1px solid #1e3a5f26;
+  border-radius: 50%;
+  color: var(--primary);
+  background: radial-gradient(circle at 30% 20%, #fff 5%, #edf1f6 32%, #b6cce3 70%, #fff 100%);
+  box-shadow: inset 0 0 0 4px #ffffffa6, 0 8px 16px #1e3a5f12;
+}
+
+.wp-serum-orb::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  right: 13px;
+  width: 10px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fff;
+  transform: rotate(35deg);
+}
+
+.wp-serum-copper-orb {
+  color: var(--serum-copper);
+  border-color: var(--accent-strong);
+  background: radial-gradient(circle at 30% 20%, #fff 5%, #fbf8f5 32%, #e9c9c0 70%, #fff 100%);
+}
+
+.wp-serum-clear-orb {
+  background: radial-gradient(circle at 30% 20%, #fff 5%, #f6f8fa 32%, #d5dfe9 70%, #fff 100%);
+}
+
+.wp-serum-step {
+  background: linear-gradient(145deg, #ab6247, var(--serum-copper));
+  box-shadow: 0 3px 8px #91472f1a;
+}
+
+.wp-serum-together {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: linear-gradient(120deg, var(--primary-dark), var(--primary));
+  box-shadow: 0 16px 40px #1e3a5f14;
+}
+
+.wp-serum-together::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  right: -5rem;
+  bottom: -9rem;
+  width: 24rem;
+  height: 15rem;
+  border: 1px solid var(--accent-strong);
+  border-radius: 50%;
+  box-shadow: 0 0 0 18px #e9c9c014, 0 0 0 36px #e9c9c00a;
+  transform: rotate(-25deg);
+}
+
+@media (min-width: 640px) {
+  .wp-serum-product { height: 31rem; }
+  .wp-serum-product-image { width: 25rem; height: 31rem; }
+  .wp-serum-product::before { width: 18rem; height: 18rem; }
+  .wp-serum-orb { width: 5rem; height: 5rem; }
+}

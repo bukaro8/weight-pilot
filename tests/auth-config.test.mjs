@@ -22,6 +22,36 @@ test("local auth requests receive a stable loopback rate-limit address", () => {
   assert.equal(adjusted.headers.get("x-forwarded-for"), "127.0.0.1");
 });
 
+test("local auth request rewriting supports Next.js proxy-backed Requests", () => {
+  const original = new Request("http://localhost:3000/api/auth/get-session", {
+    headers: {cookie: "session=example", "x-forwarded-for": "203.0.113.10"},
+  });
+  const nextRequestProxy = new Proxy(original, {
+    get(target, property) {
+      return Reflect.get(target, property, target);
+    },
+  });
+
+  const adjusted = withLocalAuthClientIp(nextRequestProxy, "http://localhost:3000");
+  assert.equal(adjusted.url, original.url);
+  assert.equal(adjusted.method, "GET");
+  assert.equal(adjusted.headers.get("cookie"), "session=example");
+  assert.equal(adjusted.headers.get("x-forwarded-for"), "127.0.0.1");
+});
+
+test("local auth request rewriting preserves POST bodies", async () => {
+  const original = new Request("http://localhost:3000/api/auth/sign-in/email", {
+    method: "POST",
+    headers: {"content-type": "application/json"},
+    body: JSON.stringify({email: "member@example.test", password: "not-a-real-password"}),
+  });
+
+  const adjusted = withLocalAuthClientIp(original, "http://localhost:3000");
+  assert.equal(adjusted.method, "POST");
+  assert.equal(adjusted.headers.get("content-type"), "application/json");
+  assert.equal(await adjusted.text(), JSON.stringify({email: "member@example.test", password: "not-a-real-password"}));
+});
+
 test("public requests are not rewritten", () => {
   const request = new Request("https://weightpilot.example.com/api/auth/get-session", {headers: {"cf-connecting-ip": "203.0.113.10"}});
   assert.equal(withLocalAuthClientIp(request, "https://weightpilot.example.com"), request);
