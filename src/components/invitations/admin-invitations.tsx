@@ -9,7 +9,8 @@ import {InvitationStatusTabs, type InvitationTabStatus} from "@/components/invit
 import {invitationRegistrationLink, invitationShareMessage, smsInvitationUrl, whatsappInvitationUrl, type InvitationLanguage} from "@/features/invitations/sharing";
 
 type AdminInvitation = {
-  id: string; code: string | null; codePreview: string; createdAt: string; expiresAt: string;
+  id: string; code: string | null; codePreview: string; createdAt: string; expiresAt: string | null;
+  kind: "STANDARD" | "MASTER"; usageCount: number;
   revokedAt: string | null; redeemedAt: string | null; redemptionType: "REGISTRATION" | "REACTIVATION" | null;
   creatorName: string; creatorEmail: string; creatorRole: "USER" | "ADMIN"; redeemerName: string | null; redeemerEmail: string | null;
   status: "ACTIVE" | "USED" | "EXPIRED" | "REVOKED";
@@ -20,7 +21,7 @@ export function AdminInvitations({initialInvitations, publicOrigin}: {initialInv
   const invitationsT = useTranslations("invitations");
   const locale = useLocale();
   const [items, setItems] = useState(initialInvitations);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<"STANDARD" | "MASTER" | null>(null);
   const [revoking, setRevoking] = useState<string>();
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
@@ -34,7 +35,7 @@ export function AdminInvitations({initialInvitations, publicOrigin}: {initialInv
     return () => { window.clearTimeout(startup); window.clearInterval(timer); };
   }, []);
 
-  const getStatus = (item: AdminInvitation) => item.status === "ACTIVE" && now > 0 && new Date(item.expiresAt).getTime() <= now ? "EXPIRED" : item.status;
+  const getStatus = (item: AdminInvitation) => item.status === "ACTIVE" && item.kind === "STANDARD" && item.expiresAt && now > 0 && new Date(item.expiresAt).getTime() <= now ? "EXPIRED" : item.status;
   const tabCounts = items.reduce<Record<InvitationTabStatus, number>>((counts, item) => {
     const status = getStatus(item);
     if (status !== "REVOKED") counts[status] += 1;
@@ -42,18 +43,20 @@ export function AdminInvitations({initialInvitations, publicOrigin}: {initialInv
   }, {ACTIVE: 0, USED: 0, EXPIRED: 0});
   const tabItems = items.filter((item) => getStatus(item) === selectedTab);
 
-  async function create() {
-    setCreating(true); setError(undefined); setNotice(undefined);
+  async function create(kind: "STANDARD" | "MASTER" = "STANDARD") {
+    setCreating(kind); setError(undefined); setNotice(undefined);
     try {
-      const response = await fetch("/api/invitations", {method: "POST"});
+      const response = kind === "MASTER"
+        ? await fetch("/api/invitations", {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify({kind})})
+        : await fetch("/api/invitations", {method: "POST"});
       if (!response.ok) {
         const body = await response.json() as {error?: string};
         throw new Error(body.error === "INVITATION_CREATE_RATE_LIMITED" ? "rate" : "create");
       }
       const body = await response.json() as {invitation: AdminInvitation};
       setItems((current) => [body.invitation, ...current]);
-      setNotice(t("generated"));
-    } catch (cause) { setError(cause instanceof Error && cause.message === "rate" ? invitationsT("createRateLimited") : t("generateError")); } finally { setCreating(false); }
+      setNotice(t(kind === "MASTER" ? "masterGenerated" : "generated"));
+    } catch (cause) { setError(cause instanceof Error && cause.message === "rate" ? invitationsT("createRateLimited") : t("generateError")); } finally { setCreating(null); }
   }
 
   async function revoke(id: string) {
@@ -67,23 +70,23 @@ export function AdminInvitations({initialInvitations, publicOrigin}: {initialInv
   }
 
   return <main id="main-content" className="flex-1 px-4 py-10 sm:px-6 sm:py-14 lg:px-10"><div className="mx-auto max-w-7xl">
-    <div className="rounded-[1.5rem] bg-primary-dark p-6 text-white sm:p-9"><div className="flex size-12 items-center justify-center rounded-2xl bg-white/10 text-accent"><ShieldCheck aria-hidden="true" size={24}/></div><p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-accent">{t("eyebrow")}</p><h1 className="mt-3 font-display text-4xl font-semibold tracking-[-0.025em] sm:text-5xl">{t("title")}</h1><p className="mt-4 max-w-2xl leading-7 text-white/80">{t("description")}</p><div className="mt-6 rounded-2xl border border-white/15 bg-white/5 p-4"><h2 className="font-display text-xl font-semibold text-white">{invitationsT("communityTitle")}</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-white/85">{invitationsT("communityBody")}</p></div><Button size="large" onClick={() => void create()} disabled={creating} className="mt-5 w-full bg-accent text-primary-dark hover:bg-white focus-visible:ring-white focus-visible:ring-offset-primary-dark sm:w-auto">{creating ? <LoaderCircle className="mr-2 motion-safe:animate-spin" aria-hidden="true" size={18}/> : <Plus className="mr-2" aria-hidden="true" size={18}/>} {creating ? t("generating") : t("generate")}</Button></div>
+    <div className="rounded-[1.5rem] bg-primary-dark p-6 text-white sm:p-9"><div className="flex size-12 items-center justify-center rounded-2xl bg-white/10 text-accent"><ShieldCheck aria-hidden="true" size={24}/></div><p className="mt-6 text-xs font-bold uppercase tracking-[0.18em] text-accent">{t("eyebrow")}</p><h1 className="mt-3 font-display text-4xl font-semibold tracking-[-0.025em] sm:text-5xl">{t("title")}</h1><p className="mt-4 max-w-2xl leading-7 text-white/80">{t("description")}</p><div className="mt-6 rounded-2xl border border-white/15 bg-white/5 p-4"><h2 className="font-display text-xl font-semibold text-white">{invitationsT("communityTitle")}</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-white/85">{invitationsT("communityBody")}</p></div><div className="mt-5 flex flex-col gap-3 sm:flex-row"><Button size="large" onClick={() => void create()} disabled={Boolean(creating)} className="w-full bg-accent text-primary-dark hover:bg-white focus-visible:ring-white focus-visible:ring-offset-primary-dark sm:w-auto">{creating === "STANDARD" ? <LoaderCircle className="mr-2 motion-safe:animate-spin" aria-hidden="true" size={18}/> : <Plus className="mr-2" aria-hidden="true" size={18}/>} {creating === "STANDARD" ? t("generating") : t("generate")}</Button><Button size="large" onClick={() => void create("MASTER")} disabled={Boolean(creating)} className="w-full border border-white/40 bg-transparent text-white hover:bg-white/10 focus-visible:ring-white focus-visible:ring-offset-primary-dark sm:w-auto">{creating === "MASTER" ? <LoaderCircle className="mr-2 motion-safe:animate-spin" aria-hidden="true" size={18}/> : <Plus className="mr-2" aria-hidden="true" size={18}/>} {creating === "MASTER" ? t("generating") : t("createMaster")}</Button></div><p className="mt-3 text-sm leading-6 text-white/80">{t("masterHelp")}</p></div>
     <div className="mt-8"><h2 className="font-display text-3xl font-semibold text-primary-dark">{t("allInvitations")}</h2><p className="mt-1 text-sm text-muted">{t("shareIntro")}</p><InvitationStatusTabs selected={selectedTab} counts={tabCounts} ariaLabel={t("allInvitations")} onSelect={setSelectedTab} labels={{ACTIVE: invitationsT("tabs.active"), USED: invitationsT("tabs.used"), EXPIRED: invitationsT("tabs.expired")}}/></div>
     <div className="mt-4 min-h-6" aria-live="polite">{notice && <p className="flex items-center gap-2 text-sm font-semibold text-primary"><Check aria-hidden="true" size={18}/>{notice}</p>}{error && <p className="text-sm font-semibold text-red-800" role="alert">{error}</p>}{!publicOrigin && <p className="text-sm font-semibold text-red-800" role="alert">{t("publicUrlMissing")}</p>}</div>
     {tabItems.length === 0 ? <div id="invitation-status-panel" role="tabpanel" aria-labelledby={`invitation-tab-${selectedTab.toLowerCase()}`} tabIndex={0} className="mt-5 rounded-2xl border border-dashed border-primary/20 p-10 text-center text-muted"><UsersRound className="mx-auto text-primary/60" aria-hidden="true"/><p className="mt-3">{items.length === 0 ? t("empty") : invitationsT(`tabs.empty.${selectedTab.toLowerCase()}`)}</p></div> : <div id="invitation-status-panel" role="tabpanel" aria-labelledby={`invitation-tab-${selectedTab.toLowerCase()}`} tabIndex={0} className="mt-5 grid gap-4 lg:grid-cols-2">{tabItems.map((item) => {
       const status = getStatus(item);
       return <article key={item.id} className="min-w-0 rounded-2xl border border-border bg-surface p-5 shadow-[0_10px_30px_rgba(20,42,71,0.04)] sm:p-6">
-        <div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="font-mono text-sm font-semibold text-primary-dark">••••••{item.codePreview}</p><p className="mt-1 text-xs text-muted">{t("created", {date: formatter.format(new Date(item.createdAt))})}</p><p className="mt-1 text-xs text-muted">{invitationsT("expires", {date: formatter.format(new Date(item.expiresAt))})}</p></div><span className="shrink-0 rounded-full bg-mist-blue px-3 py-1 text-xs font-bold text-primary">{invitationsT(`status.${status.toLowerCase()}`)}</span></div>
-        {status === "ACTIVE" && item.code && <InvitationSharing id={item.id} code={item.code} origin={publicOrigin} locale={locale === "es" ? "es" : "en"}/>}
+        <div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="font-mono text-sm font-semibold text-primary-dark">••••••{item.codePreview}</p><p className="mt-1 text-xs text-muted">{t("created", {date: formatter.format(new Date(item.createdAt))})}</p><p className="mt-1 text-xs text-muted">{item.kind === "MASTER" ? t("masterUsage", {count: item.usageCount}) : item.expiresAt && invitationsT("expires", {date: formatter.format(new Date(item.expiresAt))})}</p></div><div className="flex shrink-0 flex-col items-end gap-1"><span className="rounded-full bg-mist-blue px-3 py-1 text-xs font-bold text-primary">{invitationsT(`status.${status.toLowerCase()}`)}</span>{item.kind === "MASTER" && <span className="text-xs font-semibold text-primary">{t("masterBadge")}</span>}</div></div>
+        {status === "ACTIVE" && item.code && <InvitationSharing id={item.id} code={item.code} kind={item.kind} origin={publicOrigin} locale={locale === "es" ? "es" : "en"}/>}
         {status === "ACTIVE" && !item.code && <p className="mt-5 rounded-xl bg-background p-3 text-xs leading-5 text-muted">{t("memberCodePrivate")}</p>}
-        <dl className="mt-5 grid gap-4 border-t border-border pt-5 text-sm sm:grid-cols-2"><div><dt className="font-semibold text-primary-dark">{t("createdBy")}</dt><dd className="mt-1 break-words text-muted">{item.creatorName}<br/>{item.creatorEmail}<br/><span className="text-xs font-semibold text-primary">{invitationsT(`creatorType.${item.creatorRole.toLowerCase()}`)}</span></dd></div><div><dt className="font-semibold text-primary-dark">{t("referredAccount")}</dt><dd className="mt-1 break-words text-muted">{item.redeemerName ? <>{item.redeemerName}<br/>{item.redeemerEmail}<br/><span className="text-xs">{item.redemptionType && invitationsT(`type.${item.redemptionType.toLowerCase()}`)}</span></> : t("notRedeemed")}</dd></div></dl>
+        <dl className="mt-5 grid gap-4 border-t border-border pt-5 text-sm sm:grid-cols-2"><div><dt className="font-semibold text-primary-dark">{t("createdBy")}</dt><dd className="mt-1 break-words text-muted">{item.creatorName}<br/>{item.creatorEmail}<br/><span className="text-xs font-semibold text-primary">{invitationsT(`creatorType.${item.creatorRole.toLowerCase()}`)}</span></dd></div><div><dt className="font-semibold text-primary-dark">{t("referredAccount")}</dt><dd className="mt-1 break-words text-muted">{item.kind === "MASTER" ? t("masterUsage", {count: item.usageCount}) : item.redeemerName ? <>{item.redeemerName}<br/>{item.redeemerEmail}<br/><span className="text-xs">{item.redemptionType && invitationsT(`type.${item.redemptionType.toLowerCase()}`)}</span></> : t("notRedeemed")}</dd></div></dl>
         {status === "ACTIVE" && <button type="button" onClick={() => void revoke(item.id)} disabled={revoking === item.id} className="mt-5 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-primary/15 px-4 text-sm font-semibold text-primary transition-colors motion-reduce:transition-none hover:bg-pale-blush focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">{revoking === item.id ? <LoaderCircle className="mr-2 motion-safe:animate-spin" aria-hidden="true" size={17}/> : <Trash2 className="mr-2" aria-hidden="true" size={17}/>} {t("revoke")}</button>}
       </article>;
     })}</div>}
   </div></main>;
 }
 
-export function InvitationSharing({id, code, origin, locale}: {id: string; code: string; origin: string | null; locale: InvitationLanguage}) {
+export function InvitationSharing({id, code, kind = "STANDARD", origin, locale}: {id: string; code: string; kind?: "STANDARD" | "MASTER"; origin: string | null; locale: InvitationLanguage}) {
   const t = useTranslations("admin");
   const invitationsT = useTranslations("invitations");
   const [language, setLanguage] = useState<InvitationLanguage>(locale);
@@ -92,7 +95,7 @@ export function InvitationSharing({id, code, origin, locale}: {id: string; code:
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState<{kind: "success" | "error"; message: string} | null>(null);
   const link = origin ? invitationRegistrationLink(origin, language, code) : null;
-  const message = link ? invitationShareMessage(language, link) : null;
+  const message = link ? invitationShareMessage(language, link, kind) : null;
   const secondaryAction = "inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-primary/15 bg-surface px-3 text-sm font-semibold text-primary transition-colors motion-reduce:transition-none hover:bg-mist-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50";
 
   async function copyLink() {

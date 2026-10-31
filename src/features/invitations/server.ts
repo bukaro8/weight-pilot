@@ -9,12 +9,12 @@ import {alias} from "drizzle-orm/pg-core";
 import {getDb} from "@/db";
 import {account, invitation, referral, session, user} from "@/db/schema";
 import {invitationCodeHash} from "@/features/invitations/security";
+import {getInvitationStatus, invitationIsAvailable} from "@/features/invitations/policy";
 import type {InvitationReactivationInput, InvitationRegistrationInput} from "@/features/invitations/validation";
+export {getInvitationStatus} from "@/features/invitations/policy";
 
 const invitationLifetimeMs = 7 * 24 * 60 * 60 * 1000;
 const buildOnlySecret = "weightpilot-build-only-secret-not-for-runtime";
-
-export type InvitationStatus = "ACTIVE" | "USED" | "EXPIRED" | "REVOKED";
 
 export class InvitationError extends Error {
   constructor(public readonly code: "INVITATION_UNAVAILABLE" | "REGISTRATION_FAILED" | "REACTIVATION_FAILED") {
@@ -28,13 +28,6 @@ function encryptionSecret() {
   return secret;
 }
 
-export function getInvitationStatus(record: {redeemedAt: Date | null; revokedAt: Date | null; expiresAt: Date}): InvitationStatus {
-  if (record.redeemedAt) return "USED";
-  if (record.revokedAt) return "REVOKED";
-  if (record.expiresAt.getTime() <= Date.now()) return "EXPIRED";
-  return "ACTIVE";
-}
-
 async function decryptCode(ciphertext: string) {
   try {
     return await symmetricDecrypt({key: encryptionSecret(), data: ciphertext});
@@ -43,17 +36,25 @@ async function decryptCode(ciphertext: string) {
   }
 }
 
-export async function createInvitation(creatorId: string) {
+export async function createInvitation(creatorId: string, kind: "STANDARD" | "MASTER" = "STANDARD") {
+  if (kind === "MASTER") {
+    const [creator] = await getDb().select({role: user.role, status: user.status, emailVerified: user.emailVerified})
+      .from(user).where(eq(user.id, creatorId)).limit(1);
+    if (creator?.role !== "ADMIN" || creator.status !== "ACTIVE" || !creator.emailVerified) {
+      throw new InvitationError("INVITATION_UNAVAILABLE");
+    }
+  }
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const code = `WP_${randomBytes(24).toString("base64url")}`;
     const codeHash = invitationCodeHash(code);
     const codeCiphertext = await symmetricEncrypt({key: encryptionSecret(), data: code});
-    const expiresAt = new Date(Date.now() + invitationLifetimeMs);
+    const expiresAt = kind === "MASTER" ? null : new Date(Date.now() + invitationLifetimeMs);
     try {
       const [created] = await getDb().insert(invitation).values({
         codeHash,
         codeCiphertext,
         codePreview: code.slice(-6),
+        kind,
         creatorId,
         expiresAt,
       }).returning();
@@ -70,6 +71,8 @@ export async function listMemberInvitations(creatorId: string) {
     id: invitation.id,
     codeCiphertext: invitation.codeCiphertext,
     codePreview: invitation.codePreview,
+    kind: invitation.kind,
+    usageCount: invitation.usageCount,
     createdAt: invitation.createdAt,
     expiresAt: invitation.expiresAt,
     redeemedAt: invitation.redeemedAt,
@@ -82,7 +85,9 @@ export async function listMemberInvitations(creatorId: string) {
     code: getInvitationStatus(record) === "ACTIVE" ? await decryptCode(record.codeCiphertext) : null,
     codePreview: record.codePreview,
     createdAt: record.createdAt.toISOString(),
-    expiresAt: record.expiresAt.toISOString(),
+    kind: record.kind,
+    usageCount: record.kind === "MASTER" ? record.usageCount : Number(Boolean(record.redeemedAt)),
+    expiresAt: record.expiresAt?.toISOString() ?? null,
     redeemedAt: record.redeemedAt?.toISOString() ?? null,
     revokedAt: record.revokedAt?.toISOString() ?? null,
     redemptionType: record.redemptionType,
@@ -100,10 +105,6 @@ export async function revokeInvitation(invitationId: string, actor: {id: string;
   const [updated] = await getDb().update(invitation).set({revokedAt: new Date()})
     .where(and(...conditions)).returning({id: invitation.id});
   return Boolean(updated);
-}
-
-function invitationIsAvailable(record: typeof invitation.$inferSelect | undefined) {
-  return Boolean(record && !record.redeemedAt && !record.revokedAt && record.expiresAt.getTime() > Date.now());
 }
 
 export async function registerWithInvitation(input: InvitationRegistrationInput) {
@@ -139,16 +140,16 @@ export async function registerWithInvitation(input: InvitationRegistrationInput)
       });
 
       const redeemedAt = new Date();
-      const [consumed] = await transaction.update(invitation).set({
-        redeemedAt,
-        redeemedByUserId: userId,
-        redemptionType: "REGISTRATION",
-      }).where(and(
-        eq(invitation.id, lockedInvitation.id),
-        isNull(invitation.redeemedAt),
-        isNull(invitation.revokedAt),
-        gt(invitation.expiresAt, redeemedAt),
-      )).returning({id: invitation.id});
+      const [consumed] = lockedInvitation.kind === "MASTER"
+        ? await transaction.update(invitation).set({usageCount: sql`${invitation.usageCount} + 1`})
+          .where(and(eq(invitation.id, lockedInvitation.id), eq(invitation.kind, "MASTER"), isNull(invitation.revokedAt)))
+          .returning({id: invitation.id})
+        : await transaction.update(invitation).set({
+          redeemedAt, redeemedByUserId: userId, redemptionType: "REGISTRATION", usageCount: 1,
+        }).where(and(
+          eq(invitation.id, lockedInvitation.id), eq(invitation.kind, "STANDARD"),
+          isNull(invitation.redeemedAt), isNull(invitation.revokedAt), gt(invitation.expiresAt, redeemedAt),
+        )).returning({id: invitation.id});
       if (!consumed) throw new InvitationError("INVITATION_UNAVAILABLE");
       await transaction.insert(referral).values({
         invitationId: lockedInvitation.id,
@@ -193,16 +194,16 @@ export async function reactivateWithInvitation(input: InvitationReactivationInpu
       const redeemedAt = new Date();
       await transaction.delete(session).where(eq(session.userId, lockedUser.id));
       await transaction.update(user).set({status: "ACTIVE", updatedAt: redeemedAt}).where(eq(user.id, lockedUser.id));
-      const [consumed] = await transaction.update(invitation).set({
-        redeemedAt,
-        redeemedByUserId: lockedUser.id,
-        redemptionType: "REACTIVATION",
-      }).where(and(
-        eq(invitation.id, lockedInvitation.id),
-        isNull(invitation.redeemedAt),
-        isNull(invitation.revokedAt),
-        gt(invitation.expiresAt, redeemedAt),
-      )).returning({id: invitation.id});
+      const [consumed] = lockedInvitation.kind === "MASTER"
+        ? await transaction.update(invitation).set({usageCount: sql`${invitation.usageCount} + 1`})
+          .where(and(eq(invitation.id, lockedInvitation.id), eq(invitation.kind, "MASTER"), isNull(invitation.revokedAt)))
+          .returning({id: invitation.id})
+        : await transaction.update(invitation).set({
+          redeemedAt, redeemedByUserId: lockedUser.id, redemptionType: "REACTIVATION", usageCount: 1,
+        }).where(and(
+          eq(invitation.id, lockedInvitation.id), eq(invitation.kind, "STANDARD"),
+          isNull(invitation.redeemedAt), isNull(invitation.revokedAt), gt(invitation.expiresAt, redeemedAt),
+        )).returning({id: invitation.id});
       if (!consumed) throw new InvitationError("REACTIVATION_FAILED");
       await transaction.insert(referral).values({
         invitationId: lockedInvitation.id,
@@ -225,6 +226,8 @@ export async function listAdminInvitations(administratorId: string) {
     creatorId: invitation.creatorId,
     codeCiphertext: invitation.codeCiphertext,
     codePreview: invitation.codePreview,
+    kind: invitation.kind,
+    usageCount: invitation.usageCount,
     createdAt: invitation.createdAt,
     expiresAt: invitation.expiresAt,
     revokedAt: invitation.revokedAt,
@@ -246,7 +249,9 @@ export async function listAdminInvitations(administratorId: string) {
     code: record.creatorId === administratorId && getInvitationStatus(record) === "ACTIVE"
       ? await decryptCode(record.codeCiphertext) : null,
     createdAt: record.createdAt.toISOString(),
-    expiresAt: record.expiresAt.toISOString(),
+    kind: record.kind,
+    usageCount: record.kind === "MASTER" ? record.usageCount : Number(Boolean(record.redeemedAt)),
+    expiresAt: record.expiresAt?.toISOString() ?? null,
     redeemedAt: record.redeemedAt?.toISOString() ?? null,
     revokedAt: record.revokedAt?.toISOString() ?? null,
     redemptionType: record.redemptionType,
@@ -265,5 +270,5 @@ export async function getOwnedShareableInvitation(invitationId: string, creatorI
     .limit(1);
   if (!record || !invitationIsAvailable(record)) return null;
   const code = await decryptCode(record.codeCiphertext);
-  return code ? {code} : null;
+  return code ? {code, kind: record.kind} : null;
 }

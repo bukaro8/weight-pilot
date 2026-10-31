@@ -31,8 +31,10 @@ export type AdminUserDetail = AdminUserDirectoryEntry & {
   usedInvitationCount: number;
   createdInvitations: Array<{
     id: string;
+    kind: "STANDARD" | "MASTER";
+    usageCount: number;
     createdAt: string;
-    expiresAt: string;
+    expiresAt: string | null;
     redeemedAt: string | null;
     revokedAt: string | null;
     status: "ACTIVE" | "USED" | "EXPIRED" | "REVOKED";

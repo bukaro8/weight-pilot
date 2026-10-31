@@ -25,7 +25,7 @@ export async function POST(request: Request, {params}: {params: Promise<{id: str
     if (!invitation) return adminApiError("INVITATION_UNAVAILABLE", 409);
     await enforceInvitationEmailLimit(currentUser.id);
     const link = invitationRegistrationLink(origin, parsed.data.language, invitation.code);
-    const result = await sendInvitationEmail({recipient: parsed.data.email, language: parsed.data.language, link});
+    const result = await sendInvitationEmail({recipient: parsed.data.email, language: parsed.data.language, link, kind: invitation.kind});
     if (!result.ok) return adminApiError(result.reason, result.reason === "NOT_CONFIGURED" ? 503 : 502);
     return adminApiSuccess({status: "ACCEPTED"});
   } catch (error) {

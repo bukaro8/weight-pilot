@@ -21,6 +21,7 @@ export const userRole = pgEnum("user_role", ["USER", "ADMIN"]);
 export const userStatus = pgEnum("user_status", ["ACTIVE", "INACTIVE"]);
 export const preferredLanguage = pgEnum("preferred_language", ["en", "es"]);
 export const referralType = pgEnum("referral_type", ["REGISTRATION", "REACTIVATION"]);
+export const invitationKind = pgEnum("invitation_kind", ["STANDARD", "MASTER"]);
 export const questionnaireStatus = pgEnum("questionnaire_status", ["DRAFT", "SUBMITTED"]);
 export const measurementSystem = pgEnum("measurement_system", ["METRIC", "IMPERIAL"]);
 export const questionnaireReviewStatus = pgEnum("questionnaire_review_status", ["REQUESTED", "IN_REVIEW", "COMPLETED"]);
@@ -126,11 +127,13 @@ export const invitation = pgTable(
     codeHash: text("code_hash").notNull().unique(),
     codeCiphertext: text("code_ciphertext").notNull(),
     codePreview: text("code_preview").notNull(),
+    kind: invitationKind("kind").notNull().default("STANDARD"),
+    usageCount: integer("usage_count").notNull().default(0),
     creatorId: uuid("creator_id")
       .notNull()
       .references(() => user.id, {onDelete: "restrict"}),
     createdAt: timestamp("created_at", {withTimezone: true}).notNull().defaultNow(),
-    expiresAt: timestamp("expires_at", {withTimezone: true}).notNull(),
+    expiresAt: timestamp("expires_at", {withTimezone: true}),
     revokedAt: timestamp("revoked_at", {withTimezone: true}),
     redeemedAt: timestamp("redeemed_at", {withTimezone: true}),
     redeemedByUserId: uuid("redeemed_by_user_id").references(() => user.id, {onDelete: "restrict"}),
@@ -149,7 +152,6 @@ export const referral = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     invitationId: uuid("invitation_id")
       .notNull()
-      .unique()
       .references(() => invitation.id, {onDelete: "restrict"}),
     referrerUserId: uuid("referrer_user_id")
       .notNull()
@@ -161,6 +163,7 @@ export const referral = pgTable(
     createdAt: timestamp("created_at", {withTimezone: true}).notNull().defaultNow(),
   },
   (table) => [
+    index("referral_invitation_id_idx").on(table.invitationId),
     index("referral_referrer_user_id_idx").on(table.referrerUserId),
     index("referral_referred_user_id_idx").on(table.referredUserId),
   ],
@@ -461,10 +464,10 @@ export const accountRelations = relations(account, ({one}) => ({
   user: one(user, {fields: [account.userId], references: [user.id]}),
 }));
 
-export const invitationRelations = relations(invitation, ({one}) => ({
+export const invitationRelations = relations(invitation, ({one, many}) => ({
   creator: one(user, {fields: [invitation.creatorId], references: [user.id], relationName: "invitationCreator"}),
   redeemedBy: one(user, {fields: [invitation.redeemedByUserId], references: [user.id], relationName: "invitationRedeemer"}),
-  referral: one(referral),
+  referrals: many(referral),
 }));
 
 export const referralRelations = relations(referral, ({one}) => ({

@@ -87,6 +87,8 @@ export async function getAdminUserDetail(id: string): Promise<AdminUserDetail | 
     getDb().select({count: count()}).from(questionnaire).where(eq(questionnaire.userId, id)),
     getDb().select({
       id: invitation.id,
+      kind: invitation.kind,
+      usageCount: invitation.usageCount,
       createdAt: invitation.createdAt,
       expiresAt: invitation.expiresAt,
       redeemedAt: invitation.redeemedAt,
@@ -101,8 +103,10 @@ export async function getAdminUserDetail(id: string): Promise<AdminUserDetail | 
   if (!entry) return null;
   const created = createdInvitations.map((record) => ({
     id: record.id,
+    kind: record.kind,
+    usageCount: record.kind === "MASTER" ? record.usageCount : Number(Boolean(record.redeemedAt)),
     createdAt: record.createdAt.toISOString(),
-    expiresAt: record.expiresAt.toISOString(),
+    expiresAt: record.expiresAt?.toISOString() ?? null,
     redeemedAt: record.redeemedAt?.toISOString() ?? null,
     revokedAt: record.revokedAt?.toISOString() ?? null,
     status: getInvitationStatus(record),
@@ -113,7 +117,7 @@ export async function getAdminUserDetail(id: string): Promise<AdminUserDetail | 
     activeSessionCount: sessions.count,
     questionnaireCount: questionnaires.count,
     invitationCount: created.length,
-    usedInvitationCount: created.filter((item) => item.redeemedAt !== null).length,
+    usedInvitationCount: created.reduce((total, item) => total + item.usageCount, 0),
     createdInvitations: created,
   };
 }

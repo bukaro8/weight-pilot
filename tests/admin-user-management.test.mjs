@@ -31,7 +31,7 @@ test("admin user details list only invitations created by the selected user", as
     readFile(new URL("../src/messages/en.json", import.meta.url), "utf8"),
   ]);
   assert.match(server, /\.where\(eq\(invitation\.creatorId, id\)\)/u);
-  assert.match(server, /usedInvitationCount: created\.filter\(\(item\) => item\.redeemedAt !== null\)\.length/u);
+  assert.match(server, /usedInvitationCount: created\.reduce\(\(total, item\) => total \+ item\.usageCount, 0\)/u);
   assert.match(view, /createdInvitations\.map/u);
   assert.match(view, /item\.redeemer\.name/u);
   assert.match(messages, /Invitations created by this user/u);
