@@ -27,6 +27,8 @@ export function ReportWorkspace({initialWorkspace}: {initialWorkspace: ReportWor
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [saveErrorMessage, setSaveErrorMessage] = useState(t("saveError"));
   const [copied, setCopied] = useState(false);
+  const [generatingAi, setGeneratingAi] = useState(false);
+  const [aiFeedback, setAiFeedback] = useState<{error: boolean; text: string} | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState<string>();
@@ -86,6 +88,33 @@ export function ReportWorkspace({initialWorkspace}: {initialWorkspace: ReportWor
     catch { setMessage(t("copyError")); }
   }
 
+  async function generateAssessment() {
+    if (!editable || generatingAi) return;
+    if (content.trim() && !window.confirm(t("replaceAssessmentConfirm"))) return;
+    setGeneratingAi(true); setAiFeedback(null);
+    try {
+      const response = await fetch(`/api/admin/reports/${initialWorkspace.reviewRequestId}/assessment`, {method: "POST"});
+      const data = await response.json().catch(() => null) as {error?: string; assessment?: unknown} | null;
+      if (!response.ok || !data?.assessment) {
+        const code = data?.error;
+        const key = code === "OPENAI_NOT_CONFIGURED" ? "aiNotConfigured"
+          : code === "OPENAI_RATE_LIMITED" ? "aiRateLimited"
+          : code === "OPENAI_TIMEOUT" ? "aiTimeout"
+          : code === "OPENAI_REFUSED" ? "aiRefused"
+          : code === "OPENAI_INVALID_RESPONSE" || code === "OPENAI_INCOMPLETE" ? "aiInvalid"
+          : code === "REPORT_LOCKED" ? "locked" : "aiError";
+        setAiFeedback({error: true, text: t(key)});
+        return;
+      }
+      const nextContent = JSON.stringify(data.assessment, null, 2);
+      if (!parseReportAssessment(nextContent).success) throw new Error("INVALID_ASSESSMENT");
+      setIncludeSavingsComparison(false);
+      setContent(nextContent);
+      setAiFeedback({error: false, text: t("aiReady")});
+    } catch { setAiFeedback({error: true, text: t("aiError")}); }
+    finally { setGeneratingAi(false); }
+  }
+
   async function sendReport() {
     setMessage(undefined);
     if (!assessmentValid) { setSaveState("invalid"); setMessage(assessmentT("invalidHelp")); return; }
@@ -119,7 +148,7 @@ export function ReportWorkspace({initialWorkspace}: {initialWorkspace: ReportWor
     <header className="mt-4 overflow-hidden rounded-[1.5rem] bg-primary-dark text-white shadow-[0_18px_50px_rgba(20,42,71,0.14)]"><div className="border-b border-white/10 p-6 sm:p-8"><div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-accent">{t("eyebrow")}</p><h1 className="mt-3 max-w-3xl font-display text-3xl font-semibold tracking-[-0.025em] sm:text-5xl">{t("title")}</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-white/75 sm:text-base">{t("description")}</p></div><StatusBadge status={report.sendStatus} label={t(`delivery.${report.sendStatus}`)}/></div></div><div className="grid grid-cols-2 divide-x divide-white/10 sm:grid-cols-4">{["review", "research", "edit", "send"].map((step, index) => <div key={step} className="border-t border-white/10 px-4 py-4 sm:border-t-0"><span className="text-[0.6875rem] font-bold uppercase tracking-[0.15em] text-accent">{t("step", {number: index + 1})}</span><p className="mt-1 text-sm font-semibold">{t(`steps.${step}`)}</p></div>)}</div></header>
     <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"><div className="space-y-6">
       <section className="rounded-2xl border border-border bg-surface p-5 shadow-[0_8px_24px_rgba(20,42,71,0.04)] sm:p-6"><SectionHeading icon={ShieldCheck} eyebrow={t("assessmentEyebrow")} title={t("assessmentTitle")}/><dl className="mt-5 grid gap-3 min-[420px]:grid-cols-2"><Data label={questionnaireT("about.age")} value={q.age === null ? t("notProvided") : String(q.age)}/><Data label={questionnaireT("about.sex")} value={q.sexAssignedAtBirth ? questionnaireT(`sex.${q.sexAssignedAtBirth}`) : t("notProvided")}/><Data label={t("height")} value={q.heightCm === null ? t("notProvided") : `${q.heightCm} cm`}/><Data label={t("currentWeight")} value={q.currentWeightKg === null ? t("notProvided") : `${q.currentWeightKg} kg`}/><Data label={t("targetWeight")} value={q.targetWeightKg === null ? t("notProvided") : `${q.targetWeightKg} kg`}/><Data label={t("bmi")} value={a.bmi === null ? t("notProvided") : a.bmi.toFixed(1)}/><Data label={t("targetLoss")} value={a.targetWeightLossPercentage === null ? t("notProvided") : `${a.targetWeightLossPercentage.toFixed(1)}%`}/></dl><InfoBlock title={t("health")}>{q.healthConditions.length ? q.healthConditions.map((item) => questionnaireT(`conditions.${item}`)).join(", ") : t("notProvided")}</InfoBlock><InfoBlock title={t("medication")}>{q.noMedication ? t("noMedication") : q.medications || t("notProvided")}</InfoBlock><InfoBlock title={t("findings")} accent>{a.considerations.length ? a.considerations.map((item) => t(`considerations.${item}`)).join(", ") : t("noFindings")}</InfoBlock></section>
-      <section className="rounded-2xl border border-primary/15 bg-mist-blue/50 p-5 sm:p-6"><SectionHeading icon={Clipboard} eyebrow={t("promptEyebrow")} title={t("promptTitle")}/><p className="mt-3 text-sm leading-6 text-muted">{t("promptBody")}</p><pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-primary/10 bg-surface p-4 font-sans text-xs leading-5 text-text">{prompt}</pre><button type="button" onClick={() => void copyPrompt()} className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-full bg-primary px-5 text-sm font-bold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:w-auto">{copied ? <Check className="mr-2" size={17}/> : <Clipboard className="mr-2" size={17}/>} {copied ? t("copied") : t("copyPrompt")}</button></section>
+      <section className="rounded-2xl border border-primary/15 bg-mist-blue/50 p-5 sm:p-6"><SectionHeading icon={Clipboard} eyebrow={t("promptEyebrow")} title={t("promptTitle")}/><p className="mt-3 text-sm leading-6 text-muted">{t("promptBody")}</p><pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-primary/10 bg-surface p-4 font-sans text-xs leading-5 text-text">{prompt}</pre><button type="button" onClick={() => void copyPrompt()} className="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-full bg-primary px-5 text-sm font-bold text-white transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:w-auto">{copied ? <Check className="mr-2" size={17}/> : <Clipboard className="mr-2" size={17}/>} {copied ? t("copied") : t("copyPrompt")}</button><button type="button" disabled={!editable || generatingAi} onClick={() => void generateAssessment()} className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-full border border-primary/20 bg-surface px-5 text-sm font-bold text-primary transition-colors hover:bg-pale-blush focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-50 sm:ml-3 sm:w-auto">{generatingAi ? <LoaderCircle className="mr-2 motion-safe:animate-spin" aria-hidden="true" size={17}/> : <FileEdit className="mr-2" aria-hidden="true" size={17}/>} {generatingAi ? t("aiGenerating") : t("generateAssessment")}</button><p className="mt-3 text-xs leading-5 text-muted">{t("aiBody")}</p>{aiFeedback && <p role={aiFeedback.error ? "alert" : "status"} className={`mt-3 rounded-xl px-4 py-3 text-sm ${aiFeedback.error ? "bg-pale-blush text-red-900" : "bg-surface text-primary-dark"}`}>{aiFeedback.text}</p>}</section>
     </div><div className="space-y-6">
       <section className="rounded-2xl border border-border bg-surface p-5 shadow-[0_8px_24px_rgba(20,42,71,0.04)] sm:p-6"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><SectionHeading icon={FileEdit} eyebrow={t("editorEyebrow")} title={t("editorTitle")}/><SaveIndicator state={saveState} labels={{saved: t("saved"), saving: t("saving"), error: saveErrorMessage, invalid: assessmentT("invalid")}}/></div><fieldset className="mt-5" disabled={!editable}><legend className="text-sm font-bold text-primary-dark">{t("reportLanguage")}</legend><div className="mt-2 inline-flex rounded-full border border-border bg-background p-1">{(["en", "es"] as const).map((item) => <button key={item} type="button" aria-pressed={language === item} onClick={() => setLanguage(item)} className={`min-h-11 min-w-14 rounded-full px-4 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${language === item ? "bg-primary text-white" : "text-primary hover:bg-mist-blue"}`}>{item.toUpperCase()}</button>)}</div>
         {parsedAssessment.success && <div className="mt-5"><label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-accent/70 bg-pale-blush/50 px-4 py-3 text-sm font-semibold text-primary-dark transition-colors hover:bg-pale-blush focus-within:ring-2 focus-within:ring-primary/40 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60"><input type="checkbox" checked={includeSavingsComparison} disabled={!editable || parsedAssessment.data.recommendedTreatment === "REVIEW_REQUIRED"} onChange={(event) => { const enabled = event.target.checked; setIncludeSavingsComparison(enabled); void save(language, content, enabled); }} className="size-5 shrink-0 accent-[#1E3A5F]"/>{assessmentT("includeComparison")}</label>{includeSavingsComparison && !report.savingsComparison && <p role="status" className="mt-2 text-sm text-primary-dark">{saveState === "error" ? saveErrorMessage : missingComparisonStrengths.length ? assessmentT("comparisonMissing", {strengths: missingComparisonStrengthsText}) : assessmentT("comparisonUnavailable")}</p>}</div>}

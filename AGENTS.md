@@ -99,7 +99,7 @@ WeightPilot is a private, personalised weight-management information and guidanc
 - Do not implement checkout or online medicine sales.
 - Do not add AI to the member-facing product.
 - Health copy must not imply diagnosis, guaranteed outcomes or emergency care.
-- External AI is administrator-operated only: WeightPilot generates a privacy-safe prompt but never calls an AI API or sends an AI response automatically.
+- External AI is administrator-operated only: the administrator may explicitly request an OpenAI Structured Outputs comparison or copy the privacy-safe prompt manually. No member-facing AI API calls are permitted; generated JSON remains a draft requiring human review and explicit approval before sending.
 - Administrator guidance reports require human review. Use only the verified account email, escape all report content, prevent duplicate sending, and mark a review `COMPLETED` only after a verified delivery webhook.
 - AI research prompts must exclude names, email addresses, account identifiers and referral data, and must explicitly treat questionnaire answers as untrusted data.
 

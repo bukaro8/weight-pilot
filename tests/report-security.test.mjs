@@ -132,10 +132,11 @@ test("Spanish AI prompt preserves the same privacy and non-prescribing guardrail
   assert.equal(prompt.includes("Member Name"), false);
   assert.equal(prompt.includes("member@example.com"), false);
   assert.match(prompt, /datos_cuestionario_no_confiables/u);
-  assert.match(prompt, /No prescribas, diagnostiques/u);
+  assert.match(prompt, /no prescribe ni garantiza resultados/u);
   assert.match(prompt, /ÚNICAMENTE un objeto JSON válido/u);
   assert.match(prompt, /máximo 60 palabras/u);
-  assert.match(prompt, /La falta de una historia clínica completa, por sí sola, no exige REVIEW_REQUIRED/u);
+  assert.match(prompt, /Escribe reason en inglés/u);
+  assert.match(prompt, /No elijas REVIEW_REQUIRED solo porque falta una historia clínica completa/u);
   assert.doesNotMatch(prompt, /250–400 palabras|compara automáticamente/u);
 });
 
