@@ -55,6 +55,67 @@
     "messagesLink": "My Messages",
     "invitationsLink": "My Invitations"
   },
+  "dashboardJourney": {
+    "eyebrow": "Your WeightPilot journey",
+    "photoAlt": "A woman enjoying a calm morning at home with a cup of tea.",
+    "exploreGeneral": "Explore general treatment information",
+    "messageAction": "Open private messages",
+    "new": {
+      "welcome": "Welcome to WeightPilot!",
+      "intro": "Let's find your next step towards your weight goal.",
+      "actionTitle": "Start your health assessment",
+      "actionBody": "Answer a few questions about your health and weight goals. We'll then prepare your personalised review.",
+      "action": "Start assessment",
+      "privacy": "About 2 minutes · Your answers stay private"
+    },
+    "draft": {
+      "welcome": "You're making progress, {name}!",
+      "intro": "Your answers have been saved. Pick up where you left off.",
+      "actionTitle": "Your assessment is waiting",
+      "actionBody": "Continue from your saved answers. You can review everything before submitting.",
+      "action": "Continue assessment",
+      "progress": "Currently on step {step} of 5"
+    },
+    "awaiting": {
+      "title": "Your assessment is complete",
+      "body": "This earlier assessment has not entered review yet. Choose your report language and request a personalised review from your results page.",
+      "action": "Request my review"
+    },
+    "review": {
+      "title": "Your assessment is being reviewed",
+      "body": "We've received your information and are preparing your personalised guidance. We'll let you know when it's ready.",
+      "action": "View my assessment"
+    },
+    "report": {
+      "eyebrow": "Your next step",
+      "title": "Your personalised recommendation is ready",
+      "highlight": "An option highlighted for discussion",
+      "treatmentBody": "Your reviewed report highlights this option in the context of your answers. It is not a decision about individual suitability or a prescription.",
+      "reviewBody": "Your report explains what needs more individual review before an option can be highlighted. Open it for the full context and next steps.",
+      "open": "View my recommendation",
+      "explore": "Explore treatment information"
+    },
+    "request": {
+      "eyebrow": "Your treatment-access request",
+      "action": "View my request",
+      "caution": "Request status records administrative next steps only. It is not a prescription or authorisation to supply medicine.",
+      "status": {
+        "SUBMITTED": {"title": "Your request has been received", "body": "Your details are saved. We'll review your request and share any next steps here."},
+        "UNDER_REVIEW": {"title": "Your request is under review", "body": "We're checking the information you submitted. You can open your request or ask a private question."},
+        "APPROVED_FOR_NEXT_STEPS": {"title": "Next steps are available", "body": "An administrative update is ready in your request. Read it carefully and contact us privately if you have questions."},
+        "DECLINED": {"title": "There is an update to your request", "body": "Open your request to read the response. You can continue the conversation privately if anything is unclear."},
+        "CANCELLED": {"title": "Your request was cancelled", "body": "You can review the request history and your report at any time."}
+      }
+    },
+    "steps": {
+      "label": "How WeightPilot works",
+      "step": "Step {number}",
+      "complete": "Completed",
+      "1": {"title": "Your assessment", "body": "Tell us about your goal and circumstances."},
+      "2": {"title": "We review", "body": "Your answers enter a private review."},
+      "3": {"title": "Your recommendation", "body": "Read your guidance and decide what to explore next."}
+    }
+  },
   "reports": {
     "eyebrow": "Your WeightPilot reports",
     "title": "My Reports",

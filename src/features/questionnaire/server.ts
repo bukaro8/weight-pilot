@@ -107,7 +107,15 @@ export async function submitQuestionnaire(userId: string, questionnaireId: strin
       assessmentVersion: assessmentOutcome.engineVersion, submittedAt, updatedAt: submittedAt,
     }).where(and(eq(questionnaire.id, locked.id), eq(questionnaire.status, "DRAFT"))).returning();
     if (!submitted) throw new QuestionnaireError("QUESTIONNAIRE_NOT_EDITABLE");
-    return serializeQuestionnaire(submitted);
+    const [owner] = await transaction.select({preferredLanguage: user.preferredLanguage}).from(user).where(eq(user.id, userId)).limit(1);
+    if (!owner) throw new QuestionnaireError("QUESTIONNAIRE_NOT_FOUND");
+    const [review] = await transaction.insert(questionnaireReviewRequest).values({
+      questionnaireId: locked.id,
+      requestedByUserId: userId,
+      reportLanguage: owner.preferredLanguage,
+    }).onConflictDoNothing({target: questionnaireReviewRequest.questionnaireId}).returning({id: questionnaireReviewRequest.id});
+    if (!review) throw new QuestionnaireError("QUESTIONNAIRE_INVALID");
+    return {questionnaire: serializeQuestionnaire(submitted), reviewRequestId: review.id};
   });
 }
 

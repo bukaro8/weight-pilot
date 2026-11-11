@@ -43,6 +43,19 @@ export async function requestPersonalisedReview(userId: string, questionnaireId:
 
     const inserted = await transaction.insert(questionnaireReviewRequest).values({questionnaireId, requestedByUserId: userId, reportLanguage})
       .onConflictDoNothing({target: questionnaireReviewRequest.questionnaireId}).returning({id: questionnaireReviewRequest.id});
+    if (inserted.length === 0) {
+      const [existing] = await transaction.select({id: questionnaireReviewRequest.id, status: questionnaireReviewRequest.status})
+        .from(questionnaireReviewRequest).where(and(
+          eq(questionnaireReviewRequest.questionnaireId, questionnaireId),
+          eq(questionnaireReviewRequest.requestedByUserId, userId),
+        )).limit(1).for("update");
+      if (existing?.status === "REQUESTED") {
+        const [report] = await transaction.select({id: consultationReport.id}).from(consultationReport)
+          .where(eq(consultationReport.reviewRequestId, existing.id)).limit(1);
+        if (!report) await transaction.update(questionnaireReviewRequest).set({reportLanguage, updatedAt: new Date()})
+          .where(eq(questionnaireReviewRequest.id, existing.id));
+      }
+    }
     const [record] = await transaction.select().from(questionnaireReviewRequest)
       .where(and(
         eq(questionnaireReviewRequest.questionnaireId, questionnaireId),

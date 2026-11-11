@@ -52,19 +52,20 @@ test("assessment results distinguish requested, in-review and delivered report s
   }
 });
 
-test("member dashboard links to reports, messages and invitations and reads unread count", async () => {
+test("member dashboard prioritises the next journey action and links directly to available reports", async () => {
   const [page, server] = await Promise.all([
     read("../src/app/[locale]/(member)/dashboard/page.tsx"),
     read("../src/features/member-area/server.ts"),
   ]);
-  assert.match(page, /href="\/reports"/u);
+  assert.match(page, /href="\/consultations"/u);
   assert.match(page, /href="\/messages"/u);
-  assert.match(page, /href="\/invitations"/u);
-  assert.match(page, /t\("readyTitle"\)/u);
+  assert.match(page, /data\.stage === "NEW"/u);
+  assert.match(page, /data\.stage === "DRAFT"/u);
+  assert.match(page, /data\.stage === "REVIEW"/u);
+  assert.match(page, /data\.stage === "REQUEST"/u);
   assert.match(page, /href=\{`\/reports\/\$\{data\.latestReport\.id\}`\}/u);
   assert.match(page, /href="\/messages"/u);
-  assert.match(page, /getMemberReportCardState/u);
-  assert.match(page, /reportState === "REQUESTED" \|\| reportState === "IN_REVIEW"/u);
+  assert.match(server, /selectDashboardStage/u);
   assert.match(server, /countMemberUnreadMessages\(userId\)/u);
   assert.match(server, /selectLatestMemberReport\(reports\)/u);
 });

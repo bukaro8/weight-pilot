@@ -2,6 +2,7 @@ import {getQuestionnaireApiUser, questionnaireApiError, questionnaireApiSuccess}
 import {QuestionnaireError, saveQuestionnaireDraft, submitQuestionnaire} from "@/features/questionnaire/server";
 import {questionnaireDraftSchema, questionnaireSubmitRequestSchema} from "@/features/questionnaire/validation";
 import {assertTrustedMutationOrigin} from "@/lib/request-security";
+import {notifyAdminOfReviewRequest} from "@/features/reports/server";
 
 export async function PATCH(request: Request) {
   try {
@@ -27,7 +28,10 @@ export async function POST(request: Request) {
     const parsed = questionnaireSubmitRequestSchema.safeParse(await request.json());
     if (!parsed.success) return questionnaireApiError("QUESTIONNAIRE_INVALID", 422);
     const submitted = await submitQuestionnaire(currentUser.id, parsed.data.questionnaireId);
-    return questionnaireApiSuccess({questionnaire: submitted});
+    // Notification is best-effort. The review request is already committed and
+    // remains in the admin queue even when email delivery is unavailable.
+    await notifyAdminOfReviewRequest(submitted.reviewRequestId).catch(() => {});
+    return questionnaireApiSuccess({questionnaire: submitted.questionnaire});
   } catch (error) {
     if (error instanceof QuestionnaireError) return questionnaireApiError(error.code, error.code === "QUESTIONNAIRE_NOT_EDITABLE" ? 409 : 422);
     if (error instanceof Error && error.message === "UNTRUSTED_ORIGIN") return questionnaireApiError("UNTRUSTED_ORIGIN", 403);

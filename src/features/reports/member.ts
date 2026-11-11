@@ -16,6 +16,7 @@ import {isMemberReportVisible} from "@/features/member-area/report-state";
 
 export type MemberReportListItem = {
   id: string;
+  questionnaireId: string;
   assessmentReference: string;
   availableAt: string;
   language: "en" | "es";
@@ -29,6 +30,7 @@ function assessmentReference(reportId: string, availableAt: Date) {
 export async function listMemberAvailableReports(userId: string): Promise<MemberReportListItem[]> {
   const records = await getDb().select({
     id: consultationReport.id,
+    questionnaireId: questionnaire.id,
     sendStatus: consultationReport.sendStatus,
     providerMessageId: consultationReport.providerMessageId,
     acceptedAt: consultationReport.acceptedAt,
@@ -52,6 +54,7 @@ export async function listMemberAvailableReports(userId: string): Promise<Member
     if (!availableAt || !isMemberReportVisible({...record, acceptedAt: record.acceptedAt, deliveredAt: record.deliveredAt})) return [];
     return [{
       id: record.id,
+      questionnaireId: record.questionnaireId,
       assessmentReference: assessmentReference(record.id, availableAt),
       availableAt: availableAt.toISOString(),
       language: record.language,

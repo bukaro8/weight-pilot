@@ -55,6 +55,67 @@
     "messagesLink": "Mis mensajes",
     "invitationsLink": "Mis invitaciones"
   },
+  "dashboardJourney": {
+    "eyebrow": "Tu camino en WeightPilot",
+    "photoAlt": "Una mujer disfruta de una mañana tranquila en casa con una taza de té.",
+    "exploreGeneral": "Explorar información general sobre tratamientos",
+    "messageAction": "Abrir mensajes privados",
+    "new": {
+      "welcome": "¡Te damos la bienvenida a WeightPilot!",
+      "intro": "Encontremos el siguiente paso hacia tu objetivo de peso.",
+      "actionTitle": "Comienza tu evaluación de salud",
+      "actionBody": "Responde unas preguntas sobre tu salud y tus objetivos de peso. Después prepararemos tu revisión personalizada.",
+      "action": "Comenzar evaluación",
+      "privacy": "Unos 2 minutos · Tus respuestas son privadas"
+    },
+    "draft": {
+      "welcome": "¡Vas avanzando, {name}!",
+      "intro": "Tus respuestas se han guardado. Continúa donde lo dejaste.",
+      "actionTitle": "Tu evaluación te espera",
+      "actionBody": "Continúa con tus respuestas guardadas. Podrás revisarlo todo antes de enviar.",
+      "action": "Continuar evaluación",
+      "progress": "Estás en el paso {step} de 5"
+    },
+    "awaiting": {
+      "title": "Tu evaluación está completa",
+      "body": "Esta evaluación anterior aún no ha entrado en revisión. Elige el idioma del informe y solicita una revisión personalizada desde tus resultados.",
+      "action": "Solicitar mi revisión"
+    },
+    "review": {
+      "title": "Estamos revisando tu evaluación",
+      "body": "Hemos recibido tu información y estamos preparando tu orientación personalizada. Te avisaremos cuando esté lista.",
+      "action": "Ver mi evaluación"
+    },
+    "report": {
+      "eyebrow": "Tu siguiente paso",
+      "title": "Tu recomendación personalizada está lista",
+      "highlight": "Una opción destacada para comentar",
+      "treatmentBody": "Tu informe revisado destaca esta opción teniendo en cuenta tus respuestas. No determina la idoneidad individual ni constituye una receta.",
+      "reviewBody": "Tu informe explica qué aspectos necesitan una revisión individual antes de destacar una opción. Ábrelo para conocer el contexto y los siguientes pasos.",
+      "open": "Ver mi recomendación",
+      "explore": "Explorar información sobre tratamientos"
+    },
+    "request": {
+      "eyebrow": "Tu solicitud de acceso a tratamiento",
+      "action": "Ver mi solicitud",
+      "caution": "El estado de la solicitud refleja únicamente los siguientes pasos administrativos. No constituye una receta ni autoriza el suministro de medicamentos.",
+      "status": {
+        "SUBMITTED": {"title": "Hemos recibido tu solicitud", "body": "Tus datos están guardados. Revisaremos tu solicitud y compartiremos aquí los siguientes pasos."},
+        "UNDER_REVIEW": {"title": "Estamos revisando tu solicitud", "body": "Estamos comprobando la información enviada. Puedes abrir tu solicitud o hacer una pregunta privada."},
+        "APPROVED_FOR_NEXT_STEPS": {"title": "Ya tienes disponibles los siguientes pasos", "body": "Hay una actualización administrativa en tu solicitud. Léela con atención y escríbenos en privado si tienes dudas."},
+        "DECLINED": {"title": "Hay una actualización sobre tu solicitud", "body": "Abre tu solicitud para leer la respuesta. Puedes continuar la conversación en privado si algo no está claro."},
+        "CANCELLED": {"title": "Tu solicitud fue cancelada", "body": "Puedes consultar el historial de la solicitud y tu informe en cualquier momento."}
+      }
+    },
+    "steps": {
+      "label": "Cómo funciona WeightPilot",
+      "step": "Paso {number}",
+      "complete": "Completado",
+      "1": {"title": "Tu evaluación", "body": "Cuéntanos tu objetivo y tus circunstancias."},
+      "2": {"title": "Revisamos", "body": "Tus respuestas pasan a una revisión privada."},
+      "3": {"title": "Tu recomendación", "body": "Lee tu orientación y decide qué explorar después."}
+    }
+  },
   "reports": {
     "eyebrow": "Tus informes de WeightPilot",
     "title": "Mis informes",
