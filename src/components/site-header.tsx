@@ -15,8 +15,8 @@ import {useNavigationNotifications} from "@/components/navigation/use-navigation
 import {memberNavigationCount} from "@/features/notifications/policy";
 
 const memberLinks = [["/dashboard", "dashboard"], ["/consultations", "consultations"], ["/reports", "reports"], ["/treatments", "treatments"], ["/requests", "requests"], ["/invitations", "invitations"], ["/messages", "messages"], ["/serums/ghk-cu", "serums"]] as const;
-const desktopPrimaryMemberLinks = [memberLinks[0], memberLinks[1], memberLinks[2], memberLinks[6]] as const;
-const desktopMoreMemberLinks = [memberLinks[3], memberLinks[4], memberLinks[5], memberLinks[7]] as const;
+const desktopPrimaryMemberLinks = [memberLinks[0], memberLinks[2], memberLinks[6], memberLinks[3]] as const;
+const desktopMoreMemberLinks = [memberLinks[1], memberLinks[4], memberLinks[5], memberLinks[7]] as const;
 const adminLinks = [["/", "home"], ["/admin", "admin"], ["/serums/ghk-cu", "serums"]] as const;
 const publicLinks = [["/", "home"], ["/serums/ghk-cu", "serums"]] as const;
 
@@ -66,8 +66,8 @@ export function SiteHeader() {
 
   const isActive = (href: string) => href === "/" ? pathname === "/" : pathname.startsWith(href);
   const countFor = (href: string) => href === "/messages" ? notificationCounts.messages : href === "/reports" ? notificationCounts.reports : href === "/requests" ? notificationCounts.requests : 0;
-  const desktopLinks = navigationKind === "member" ? desktopPrimaryMemberLinks : links;
-  const desktopMoreLinks = navigationKind === "member" ? desktopMoreMemberLinks.filter(([href]) => catalogueEligible || (href !== "/treatments" && href !== "/requests")) : [];
+  const desktopLinks = navigationKind === "member" ? desktopPrimaryMemberLinks.filter(([href]) => catalogueEligible || href !== "/treatments") : links;
+  const desktopMoreLinks = navigationKind === "member" ? desktopMoreMemberLinks.filter(([href]) => catalogueEligible || href !== "/requests") : [];
   const moreIsActive = desktopMoreLinks.some(([href]) => isActive(href));
   const moreUnread = desktopMoreLinks.reduce((total, [href]) => total + countFor(href), 0);
   const mobileUnread = navigationKind === "member" ? memberNavigationCount(notificationCounts) : 0;

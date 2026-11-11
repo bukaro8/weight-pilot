@@ -24,11 +24,11 @@ export default async function HomePage({params}: {params: Promise<{locale: strin
     <main id="main-content" className="flex-1">
       <section className="relative overflow-hidden border-b border-primary/8">
         <div className="absolute left-1/2 top-0 -z-10 h-80 w-[56rem] -translate-x-1/2 rounded-full bg-pale-blush/70 blur-3xl"/>
-        <div className="mx-auto grid max-w-7xl gap-12 px-4 pb-16 pt-14 sm:px-6 sm:pb-20 sm:pt-18 lg:grid-cols-[1.08fr_.92fr] lg:items-center lg:gap-16 lg:px-10 lg:py-24 xl:py-28">
+        <div className="mx-auto grid max-w-7xl gap-9 px-4 pb-16 pt-10 sm:gap-12 sm:px-6 sm:pb-20 sm:pt-18 lg:grid-cols-[1.08fr_.92fr] lg:items-center lg:gap-16 lg:px-10 lg:py-24 xl:py-28">
           <div className="max-w-3xl">
             <p className="inline-flex items-center gap-2 rounded-full border border-accent-strong/25 bg-surface/80 px-3 py-2 text-[0.625rem] font-bold uppercase tracking-[0.13em] text-primary min-[375px]:text-[0.6875rem] min-[375px]:tracking-[0.16em] sm:text-xs"><span className="size-1.5 shrink-0 rounded-full bg-accent-strong"/>{t("eyebrow")}</p>
-            <h1 className="mt-6 max-w-[13ch] font-display text-[2.75rem] font-semibold leading-[1.04] tracking-[-0.035em] text-primary-dark min-[375px]:text-5xl sm:text-6xl lg:text-[4.25rem] xl:text-[4.75rem]">{t("title")}</h1>
-            <p className="mt-6 max-w-2xl text-base leading-7 text-muted sm:mt-7 sm:text-lg sm:leading-8">{t("intro")}</p>
+            <h1 className="mt-5 max-w-[13ch] font-display text-[2.65rem] font-semibold leading-[1.04] tracking-[-0.035em] text-primary-dark min-[375px]:text-[2.8rem] sm:mt-6 sm:text-6xl lg:text-[4.25rem] xl:text-[4.75rem]">{t("title")}</h1>
+            <p className="mt-5 max-w-2xl text-base leading-7 text-muted sm:mt-7 sm:text-lg sm:leading-8">{t("intro")}</p>
             <div className="mt-8 flex flex-col gap-3 sm:mt-9 sm:flex-row sm:items-center">
               <Link href="/consultations" className={`${buttonVariants({size: "large"})} w-full sm:w-auto`}>{t("primaryCta")}<ArrowRight aria-hidden="true" className="ml-2" size={18}/></Link>
               <a href="#options" className={`${buttonVariants({variant: "secondary", size: "large"})} w-full sm:w-auto`}>{t("secondaryCta")}</a>

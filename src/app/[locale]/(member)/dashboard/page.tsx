@@ -2,6 +2,7 @@ import {ArrowRight, ClipboardList, FileText, MessageCircle, UsersRound} from "lu
 import {getTranslations, setRequestLocale} from "next-intl/server";
 
 import {getFirstName} from "@/features/auth/name";
+import {EditorialPhoto} from "@/components/member-area/editorial-photo";
 import {getMemberDashboardOverview} from "@/features/member-area/server";
 import {getMemberReportCardState} from "@/features/member-area/report-state";
 import {Link, redirect} from "@/i18n/navigation";
@@ -20,15 +21,19 @@ export default async function MemberDashboardPage({params}: {params: Promise<{lo
   const reportState = getMemberReportCardState(Boolean(data.latestReport), data.reviewStatus);
 
   return <main id="main-content" className="flex-1 bg-background">
-    <section className="bg-primary-dark px-4 py-10 text-white sm:px-6 sm:py-14 lg:px-10">
-      <div className="mx-auto max-w-6xl">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent">{t("eyebrow")}</p>
-        <h1 className="mt-3 font-display text-4xl font-semibold tracking-[-0.025em] sm:text-5xl">{t("title", {name: getFirstName(member.name)})}</h1>
-        <p className="mt-4 max-w-2xl leading-7 text-white/80">{t("description")}</p>
+    <section className="relative overflow-hidden bg-primary-dark px-4 py-9 text-white sm:px-6 lg:px-10">
+      <div className="pointer-events-none absolute -right-20 -top-36 size-80 rounded-full border border-white/10" aria-hidden="true"/>
+      <div className="relative mx-auto grid max-w-6xl gap-7 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-center lg:gap-12">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-accent">{t("eyebrow")}</p>
+          <h1 className="mt-3 max-w-[16ch] font-display text-4xl font-semibold leading-[1.08] tracking-[-0.025em] sm:text-5xl">{t("title", {name: getFirstName(member.name)})}</h1>
+          <p className="mt-4 max-w-xl leading-7 text-white/80">{t("description")}</p>
+        </div>
+        <EditorialPhoto scene="conversation" alt={t("heroPhotoAlt")} className="aspect-[16/9] w-full border border-white/15 shadow-[0_16px_40px_rgba(0,0,0,0.14)] lg:aspect-[4/3]" priority/>
       </div>
     </section>
     <div className="mx-auto max-w-6xl space-y-9 px-4 py-8 sm:px-6 sm:py-11 lg:px-10">
-      {reportState === "READY" && data.latestReport ? <section aria-labelledby="report-ready-title" className="relative overflow-hidden rounded-[1.75rem] border border-accent-strong/35 bg-pale-blush p-5 shadow-[0_18px_44px_rgba(20,42,71,0.09)] sm:p-8 lg:flex lg:items-center lg:justify-between lg:gap-10">
+      {reportState === "READY" && data.latestReport ? <section aria-labelledby="report-ready-title" className="relative grid min-w-0 gap-6 overflow-hidden rounded-[1.75rem] border border-accent-strong/35 bg-pale-blush p-5 shadow-[0_18px_44px_rgba(20,42,71,0.09)] sm:p-8 lg:grid-cols-[minmax(0,1fr)_16rem] lg:items-center lg:gap-10">
         <div className="pointer-events-none absolute -right-12 -top-16 size-56 rounded-full border-[24px] border-white/45" aria-hidden="true"/>
         <div className="relative min-w-0">
           <div className="flex size-12 items-center justify-center rounded-2xl bg-primary text-white"><FileText aria-hidden="true" size={22}/></div>
@@ -36,13 +41,14 @@ export default async function MemberDashboardPage({params}: {params: Promise<{lo
           <h2 id="report-ready-title" className="mt-2 font-display text-3xl font-semibold leading-tight text-primary-dark sm:text-4xl">{t("readyTitle")}</h2>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-muted sm:text-base">{t("readyBody", {date: date(data.latestReport.availableAt) ?? ""})}</p>
         </div>
-        <div className="relative mt-6 flex w-full flex-col gap-3 sm:flex-row lg:mt-0 lg:w-auto lg:min-w-64 lg:flex-col">
+        <div className="relative flex w-full flex-col gap-3 sm:flex-row lg:col-start-1 lg:row-start-2 lg:flex-col">
           <Link href={`/reports/${data.latestReport.id}`} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary px-6 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">{t("viewLatestReport")}<ArrowRight aria-hidden="true" size={18}/></Link>
           <Link href="/messages" className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-primary/20 bg-surface px-6 text-sm font-bold text-primary transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"><MessageCircle aria-hidden="true" size={17}/>{t("messageAboutReport")}</Link>
         </div>
-      </section> : reportState === "REQUESTED" || reportState === "IN_REVIEW" ? <section aria-live="polite" className="flex items-start gap-4 rounded-2xl border border-primary/10 bg-surface px-4 py-4 sm:px-6">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-mist-blue text-primary"><FileText aria-hidden="true" size={19}/></div>
-        <div className="min-w-0"><h2 className="font-display text-xl font-semibold text-primary-dark">{t(reportState === "REQUESTED" ? "requestedTitle" : "preparingTitle")}</h2><p className="mt-1 text-sm leading-6 text-muted">{t(reportState === "REQUESTED" ? "requestedBody" : "preparingBody")}</p></div>
+        <EditorialPhoto scene="morning" alt={t("readyPhotoAlt")} className="relative aspect-[16/9] w-full lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:aspect-[3/4]"/>
+      </section> : reportState === "REQUESTED" || reportState === "IN_REVIEW" ? <section aria-live="polite" className="grid gap-4 rounded-[1.5rem] border border-primary/10 bg-surface p-4 shadow-[0_10px_28px_rgba(20,42,71,0.05)] sm:grid-cols-[minmax(0,1fr)_11rem] sm:items-center sm:p-5">
+        <div className="min-w-0"><div className="flex size-11 items-center justify-center rounded-2xl bg-mist-blue text-primary shadow-sm"><FileText aria-hidden="true" size={20}/></div><h2 className="mt-3 font-display text-2xl font-semibold text-primary-dark">{t(reportState === "REQUESTED" ? "requestedTitle" : "preparingTitle")}</h2><p className="mt-2 max-w-xl text-sm leading-6 text-muted">{t(reportState === "REQUESTED" ? "requestedBody" : "preparingBody")}</p></div>
+        <EditorialPhoto scene="morning" alt={t("pendingPhotoAlt")} className="aspect-[16/9] w-full sm:aspect-square"/>
       </section> : null}
 
       <section aria-labelledby="invite-friends-title" className="grid min-w-0 gap-6 overflow-hidden rounded-[1.75rem] border border-accent-strong/40 bg-pale-blush p-5 shadow-[0_12px_36px_rgba(20,42,71,0.06)] sm:p-7 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] lg:items-center lg:gap-10">
