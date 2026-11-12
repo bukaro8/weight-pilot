@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import test from "node:test";
+import {registerHooks} from "node:module";
 
 import {invitationRegistrationLink, invitationShareMessage, publicInvitationOrigin, smsInvitationUrl, whatsappInvitationUrl} from "../src/features/invitations/sharing.ts";
-import {renderInvitationEmail} from "../src/features/invitations/template.ts";
+
+registerHooks({resolve(specifier, context, nextResolve) {
+  if (specifier === "@/features/email/notice") return nextResolve(new URL("../src/features/email/notice.ts", import.meta.url).href, context);
+  return nextResolve(specifier, context);
+}});
+const {renderInvitationEmail} = await import("../src/features/invitations/template.ts");
 
 test("public invitation links use the configured HTTPS origin and preserve the code and locale", () => {
   assert.equal(publicInvitationOrigin("http://localhost:3000"), null);
@@ -23,6 +29,7 @@ test("English and Spanish invitation emails contain an escaped registration link
     assert.match(email.html, /href="https:\/\/weightpilot\.example\.com\/(?:en|es)\/register\?code=WP_ABC_123"/u);
     assert.equal(email.text.includes(link), true);
     assert.equal(email.html.includes("localhost"), false);
+    assert.match(email.html, /not monitored|no se supervisa/u);
   }
   const unsafe = renderInvitationEmail("en", "https://weightpilot.example.com/?x=\"<script>", "Safe invitation");
   assert.equal(unsafe.html.includes("<script>"), false);

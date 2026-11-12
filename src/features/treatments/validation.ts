@@ -3,15 +3,27 @@ import {z} from "zod";
 export const treatmentSchema = z.enum(["SEMAGLUTIDE", "TIRZEPATIDE"]);
 export const requestStatusSchema = z.enum(["APPROVED_FOR_NEXT_STEPS", "DECLINED"]);
 
+const ukPostcode = /^(?:GIR ?0AA|[A-Z]{1,2}\d[A-Z\d]? ?\d[ABD-HJLNP-UW-Z]{2})$/u;
+export function normaliseUkPostcode(value: string) {
+  const compact = value.trim().toUpperCase().replace(/\s+/gu, "");
+  return compact.length > 3 ? `${compact.slice(0, -3)} ${compact.slice(-3)}` : compact;
+}
+
 export const createTreatmentRequestSchema = z.object({
   clientRequestId: z.uuid(),
   reportId: z.uuid(),
   treatment: treatmentSchema,
   fullName: z.string().trim().min(2).max(160),
-  address: z.string().trim().min(5).max(500),
-  postcode: z.string().trim().min(3).max(30),
-  telephone: z.string().trim().min(7).max(30).regex(/^[+()\d\s.-]+$/),
-  message: z.string().trim().max(1000).optional(),
+  streetAddress: z.string().trim().min(5).max(160),
+  flatNumber: z.string().trim().max(80),
+  buildingName: z.string().trim().max(120),
+  city: z.string().trim().min(2).max(100),
+  postcode: z.string().transform(normaliseUkPostcode).pipe(z.string().regex(ukPostcode)),
+  telephone: z.string().trim().min(10).max(30).regex(/^\+?[\d()\s.-]+$/u).refine((value) => {
+    const digits = value.replace(/\D/gu, "");
+    const national = value.startsWith("+44") ? `0${digits.slice(2)}` : digits.startsWith("0044") ? `0${digits.slice(4)}` : digits;
+    return /^0[1-9]\d{8,9}$/u.test(national);
+  }),
   language: z.enum(["en", "es"]),
 }).strict();
 

@@ -1,6 +1,6 @@
 "use client";
 
-import {BarChart3, ClipboardCheck, Droplets, ExternalLink, Menu, MessageCircle, PoundSterling, TicketCheck, Users, X} from "lucide-react";
+import {BarChart3, ClipboardCheck, Droplets, ExternalLink, MailCheck, Menu, MessageCircle, PoundSterling, TicketCheck, Users, X} from "lucide-react";
 import {useTranslations} from "next-intl";
 import {useEffect, useState} from "react";
 
@@ -18,6 +18,7 @@ const adminLinks = [
   ["/admin/users", "users", Users],
   ["/admin/questionnaires", "reviews", ClipboardCheck],
   ["/admin/treatment-requests", "treatmentRequests", ClipboardCheck],
+  ["/admin/follow-ups", "followUps", MailCheck],
   ["/admin/messages", "messages", MessageCircle],
   ["/admin/invitations", "invitations", TicketCheck],
   ["/admin/pricing", "pricing", PoundSterling],

@@ -25,7 +25,15 @@ export default async function AdminRequestPage({params}: {params: Promise<{local
       <div className="space-y-5">
         <section className="rounded-3xl border border-border bg-surface p-5 sm:p-7">
           <h2 className="font-display text-2xl text-primary-dark">{t("reviewDetails")}</h2>
-          <dl className="mt-5 divide-y divide-border break-words">{[[t("fullName"), request.fullName], [t("address"), request.address], [t("postcode"), request.postcode], [t("telephone"), request.telephone], [t("optionalMessage"), request.message || "—"]].map(([label, value]) => <div key={label} className="py-3"><dt className="text-sm font-semibold text-primary-dark">{label}</dt><dd className="mt-1 whitespace-pre-wrap text-muted">{value}</dd></div>)}</dl>
+          <dl className="mt-5 divide-y divide-border break-words">{[
+            [t("fullName"), request.fullName], [t("telephone"), request.telephone],
+            [t(request.streetAddress ? "streetAddress" : "address"), request.streetAddress ?? request.address],
+            ...(request.flatNumber ? [[t("flatNumber"), request.flatNumber]] : []),
+            ...(request.buildingName ? [[t("buildingName"), request.buildingName]] : []),
+            ...(request.city ? [[t("city"), request.city]] : []),
+            [t("postcode"), request.postcode],
+            ...(request.message ? [[t("optionalMessage"), request.message]] : []),
+          ].map(([label, value]) => <div key={label} className="py-3"><dt className="text-sm font-semibold text-primary-dark">{label}</dt><dd className="mt-1 whitespace-pre-wrap text-muted">{value}</dd></div>)}</dl>
           <div className="mt-5 flex flex-wrap gap-5">
             {reviewRequestId ? <Link href={`/admin/questionnaires/${reviewRequestId}`} className="inline-flex min-h-11 items-center font-semibold text-primary underline underline-offset-4">{t("associatedReport")}</Link> : null}
             <Link href={conversationId ? `/admin/messages/${conversationId}` : "/admin/messages"} className="inline-flex min-h-11 items-center font-semibold text-primary underline underline-offset-4">{t("messageAdmin")}</Link>

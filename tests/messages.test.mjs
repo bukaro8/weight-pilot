@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import test from "node:test";
+import {registerHooks} from "node:module";
 
 import {privateMessageSchema} from "../src/features/messages/validation.ts";
-import {renderPrivateMessageNotification} from "../src/features/messages/template.ts";
+
+registerHooks({resolve(specifier, context, nextResolve) {
+  if (specifier === "@/features/email/notice") return nextResolve(new URL("../src/features/email/notice.ts", import.meta.url).href, context);
+  return nextResolve(specifier, context);
+}});
+const {renderPrivateMessageNotification} = await import("../src/features/messages/template.ts");
 
 test("message validation trims text, enforces limits, and requires a client idempotency id", () => {
   const clientMessageId = "29d1cd84-7c11-45c9-a61a-14f51a79088f";
@@ -26,6 +32,9 @@ test("message notifications are bilingual, generic, and escape the secure link",
   assert.equal(en.html.includes("<script>"), false);
   assert.match(en.html, /&lt;script&gt;/u);
   assert.equal(en.text.includes(sensitiveMessage), false);
+  assert.match(en.html, /This email is not monitored\. Please do not reply\./u);
+  assert.match(es.html, /Este correo no se supervisa\. Por favor, no respondas\./u);
+  assert.match(es.html, /https:\/\/weightpilot\.example\/es\/messages/u);
 });
 
 test("message APIs independently enforce member ownership and administrator role", async () => {

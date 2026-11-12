@@ -1,5 +1,6 @@
 import type {ReviewRequestStatus} from "@/features/assessment/types";
 import type {Locale} from "@/i18n/routing";
+import type {FollowUpHistoryItem} from "@/features/follow-ups/types";
 
 export type AdminReviewSummary = {
   id: string;
@@ -25,6 +26,7 @@ export type AdminUserDirectoryEntry = {
 };
 
 export type AdminUserDetail = AdminUserDirectoryEntry & {
+  followUpHistory: FollowUpHistoryItem[];
   activeSessionCount: number;
   questionnaireCount: number;
   invitationCount: number;

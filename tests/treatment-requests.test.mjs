@@ -3,14 +3,19 @@ import test from "node:test";
 import {readFileSync} from "node:fs";
 import {registerHooks} from "node:module";
 import {canBrowseTreatments, canChangeRequestStatus} from "../src/features/treatments/policy.ts";
-import {createTreatmentRequestSchema, treatmentDecisionSchema} from "../src/features/treatments/validation.ts";
+import {createTreatmentRequestSchema, normaliseUkPostcode, treatmentDecisionSchema} from "../src/features/treatments/validation.ts";
 import {formatPenceWithPoundSymbol, treatmentCardHref, treatmentFromPath, treatmentItems} from "../src/features/treatments/presentation.ts";
-import {renderTreatmentApprovalEmail, renderTreatmentRequestNotification} from "../src/features/treatments/email-template.ts";
+
 import {catalogueDosePriceRows, catalogueDoseStages} from "../src/features/treatments/dose-stages.ts";
 import {getClearTreatmentSuggestion} from "../src/features/reports/content.ts";
 
 const eligible = {role: "USER", status: "ACTIVE", emailVerified: true};
-const request = {clientRequestId: "a8e8b6b2-6401-45cc-9b77-99517e0a37d1", reportId: "8479dca7-6810-4efb-bd27-069c49417286", treatment: "SEMAGLUTIDE", fullName: "Alex Example", address: "1 Example Road, London", postcode: "SW1A 1AA", telephone: "+44 7700 900123", language: "en"};
+const request = {clientRequestId: "a8e8b6b2-6401-45cc-9b77-99517e0a37d1", reportId: "8479dca7-6810-4efb-bd27-069c49417286", treatment: "SEMAGLUTIDE", fullName: "Alex Example", streetAddress: "24 King Street", flatNumber: "Flat 3B", buildingName: "Rose Court", city: "Manchester", postcode: "M1 1AE", telephone: "+44 7700 900123", language: "en"};
+registerHooks({resolve(specifier, context, nextResolve) {
+  if (specifier === "@/features/email/notice") return nextResolve(new URL("../src/features/email/notice.ts", import.meta.url).href, context);
+  return nextResolve(specifier, context);
+}});
+const {renderTreatmentApprovalEmail, renderTreatmentRequestNotification} = await import("../src/features/treatments/email-template.ts");
 
 test("catalogue requires verified active USER and an available report", () => {
   assert.equal(canBrowseTreatments(eligible, true), true);
@@ -51,9 +56,51 @@ test("illustrative dose labels map to configured tiers without treating tiers as
 test("request validation accepts both languages and rejects malformed contact data", () => {
   assert.equal(createTreatmentRequestSchema.safeParse(request).success, true);
   assert.equal(createTreatmentRequestSchema.safeParse({...request, language: "es", treatment: "TIRZEPATIDE"}).success, true);
+  assert.equal(createTreatmentRequestSchema.safeParse({...request, flatNumber: "", buildingName: ""}).success, true);
   assert.equal(createTreatmentRequestSchema.safeParse({...request, telephone: "abc"}).success, false);
-  assert.equal(createTreatmentRequestSchema.safeParse({...request, message: "x".repeat(1001)}).success, false);
+  assert.equal(createTreatmentRequestSchema.safeParse({...request, telephone: "1234567890"}).success, false);
+  assert.equal(createTreatmentRequestSchema.safeParse({...request, telephone: "00000 000000"}).success, false);
+  assert.equal(createTreatmentRequestSchema.safeParse({...request, postcode: "ABC 123"}).success, false);
+  assert.equal(createTreatmentRequestSchema.safeParse({...request, city: ""}).success, false);
+  assert.equal(createTreatmentRequestSchema.safeParse({...request, streetAddress: ""}).success, false);
+  assert.equal(createTreatmentRequestSchema.safeParse({...request, message: "Hello"}).success, false);
   assert.equal(createTreatmentRequestSchema.safeParse({...request, role: "ADMIN"}).success, false);
+  assert.equal(normaliseUkPostcode("sw1a1aa"), "SW1A 1AA");
+  assert.equal(createTreatmentRequestSchema.parse({...request, postcode: "sw1a1aa"}).postcode, "SW1A 1AA");
+});
+
+test("the request form is a single-step bilingual address form with an exact Order now action", () => {
+  const form = readFileSync(new URL("../src/components/treatments/request-form.tsx", import.meta.url), "utf8");
+  const page = readFileSync(new URL("../src/app/[locale]/(member)/treatments/[treatment]/request/page.tsx", import.meta.url), "utf8");
+  const en = JSON.parse(readFileSync(new URL("../src/messages/treatments/en.json", import.meta.url)));
+  const es = JSON.parse(readFileSync(new URL("../src/messages/treatments/es.json", import.meta.url)));
+  assert.equal(en.orderNow, "Order now");
+  assert.equal(es.orderNow, "Ordenar ahora");
+  assert.equal(en.requestTitle, "Request {treatmentName}");
+  assert.equal(es.requestTitle, "Solicitar {treatmentName}");
+  assert.match(form, /t\("whatNextTitle"\)/u);
+  assert.match(form, /t\("whatNextMessage"\)/u);
+  assert.match(form, /t\("whatNextSecondary"\)/u);
+  assert.match(form, /t\("requestReceivedTitle"\)/u);
+  assert.match(form, /t\("orderNow"\)/u);
+  assert.doesNotMatch(form, /optionalMessage|textarea|reviewing/u);
+  assert.match(page, /getLatestMemberDeliveryDetails\(member\.id\)/u);
+  assert.deepEqual(Object.keys(en).sort(), Object.keys(es).sort());
+});
+
+test("structured fields persist while historical address and message remain readable", () => {
+  const migration = readFileSync(new URL("../drizzle/0021_legal_ser_duncan.sql", import.meta.url), "utf8");
+  const server = readFileSync(new URL("../src/features/treatments/server.ts", import.meta.url), "utf8");
+  const admin = readFileSync(new URL("../src/app/[locale]/(admin)/admin/treatment-requests/[id]/page.tsx", import.meta.url), "utf8");
+  assert.match(migration, /ADD COLUMN "street_address" text/u);
+  assert.match(migration, /ADD COLUMN "flat_number" text/u);
+  assert.match(migration, /ADD COLUMN "building_name" text/u);
+  assert.match(migration, /ADD COLUMN "city" text/u);
+  assert.doesNotMatch(migration, /DROP|DELETE|UPDATE/u);
+  assert.match(server, /address, message: null/u);
+  assert.match(server, /onConflictDoNothing\(\)/u);
+  assert.match(admin, /request\.streetAddress \? "streetAddress" : "address"/u);
+  assert.match(admin, /request\.message \?/u);
 });
 
 test("status transitions are restricted and declining requires a reason", () => {
@@ -75,9 +122,19 @@ test("EN and ES treatment keys match", () => {
 test("notifications are bilingual, generic and contain only a secure request link", () => {
   const en = renderTreatmentRequestNotification({language: "en", target: "admin", url: "https://weightpilot.uk/en/admin/treatment-requests/example"});
   const es = renderTreatmentRequestNotification({language: "es", target: "member", url: "https://weightpilot.uk/es/requests/example"});
+  const receiptEn = renderTreatmentRequestNotification({language: "en", target: "member", event: "created", url: "https://weightpilot.uk/en/requests/example"});
+  const receiptEs = renderTreatmentRequestNotification({language: "es", target: "member", event: "created", url: "https://weightpilot.uk/es/requests/example"});
   assert.match(en.html, /New WeightPilot request/);
   assert.match(es.html, /Actualización de tu solicitud/);
+  assert.match(receiptEn.subject, /received your WeightPilot request/u);
+  assert.match(receiptEs.subject, /recibido tu solicitud/u);
+  assert.match(receiptEn.html, /does not confirm a purchase/u);
+  assert.match(receiptEs.html, /no confirma una compra/u);
+  assert.match(en.html, /This email is not monitored/u);
+  assert.match(es.html, /Este correo no se supervisa/u);
   assert.doesNotMatch(en.html + es.html, /questionnaire|medicine|address|telephone/i);
+  const route = readFileSync(new URL("../src/app/api/treatment-requests/route.ts", import.meta.url), "utf8");
+  assert.match(route, /recipient: member\.email, target: "member", event: "created"/u);
 });
 
 test("approval emails are bilingual, include configured or fallback payment details and private messaging", () => {
@@ -89,6 +146,7 @@ test("approval emails are bilingual, include configured or fallback payment deta
   assert.match(en.html, /XXXX/);
   assert.match(en.html, /12\.5 mg/);
   assert.match(en.html, /https:\/\/weightpilot\.uk\/en\/messages/);
+  assert.match(en.html, /This email is not monitored/u);
   assert.match(es.html, /Tu solicitud se ha aprobado/);
   assert.match(es.html, /11 22 33/);
   assert.match(es.html, /12345678/);
@@ -104,7 +162,7 @@ test("approval email uses the verified account recipient and a stable idempotenc
     if (specifier.startsWith("@/")) return nextResolve(new URL(`../src/${specifier.slice(2)}.ts`, import.meta.url).href, context);
     return nextResolve(specifier, context);
   }});
-  const {sendTreatmentApprovalEmail} = await import("../src/features/treatments/email.ts");
+  const {sendTreatmentApprovalEmail, notifyTreatmentRequest} = await import("../src/features/treatments/email.ts");
   const env = Object.fromEntries(["RESEND_API_KEY", "EMAIL_FROM", "PUBLIC_APP_URL", "ACCOUNT_NAME", "ACCOUNT_NUMBER", "SORT_CODE"].map((key) => [key, process.env[key]]));
   Object.assign(process.env, {RESEND_API_KEY: "test-key", EMAIL_FROM: "sender@example.invalid", PUBLIC_APP_URL: "https://weightpilot.uk"});
   globalThis.__treatmentMailCalls = [];
@@ -115,6 +173,12 @@ test("approval email uses the verified account recipient and a stable idempotenc
     assert.equal(globalThis.__treatmentMailCalls[0][0].to, "verified@example.invalid");
     assert.equal(globalThis.__treatmentMailCalls[0][1].idempotencyKey, "weightpilot-treatment-approval-request-123");
     assert.match(globalThis.__treatmentMailCalls[0][0].html, /0000000/);
+    const receipt = await notifyTreatmentRequest({id: "request-123", language: "es", recipient: "verified@example.invalid", target: "member", event: "created"});
+    assert.equal(receipt.accepted, true);
+    assert.equal(globalThis.__treatmentMailCalls[1][0].to, "verified@example.invalid");
+    assert.equal(globalThis.__treatmentMailCalls[1][1].idempotencyKey, "treatment-request-request-123-member-created");
+    assert.match(globalThis.__treatmentMailCalls[1][0].html, /Hemos recibido tu solicitud/u);
+    assert.doesNotMatch(globalThis.__treatmentMailCalls[1][0].html, /0000000|00 00 00/u);
     const route = readFileSync(new URL("../src/app/api/admin/treatment-requests/[id]/route.ts", import.meta.url), "utf8");
     assert.match(route, /if \(!detail\.emailVerified\)/u);
     assert.match(route, /recipient: detail\.memberEmail/u);

@@ -17,10 +17,11 @@ export async function POST(request: Request) {
     await enforceTreatmentRequestLimit(member.id);
     const result = await createTreatmentRequest(member.id, parsed.data);
     if (result.created) {
-      try {
-        const admin = await getActiveAdministrator();
-        if (admin) await notifyTreatmentRequest({id: result.request.id, language: admin.preferredLanguage, recipient: admin.email, target: "admin", event: "created"});
-      } catch { /* The saved request remains authoritative if an optional notification fails. */ }
+      const admin = await getActiveAdministrator().catch(() => null);
+      await Promise.allSettled([
+        notifyTreatmentRequest({id: result.request.id, language: parsed.data.language, recipient: member.email, target: "member", event: "created"}),
+        ...(admin ? [notifyTreatmentRequest({id: result.request.id, language: admin.preferredLanguage, recipient: admin.email, target: "admin", event: "created"})] : []),
+      ]);
     }
     return questionnaireApiSuccess({id: result.request.id, created: result.created}, result.created ? 201 : 200);
   } catch (error) {

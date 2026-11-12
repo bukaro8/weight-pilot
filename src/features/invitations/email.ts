@@ -1,6 +1,7 @@
 import "server-only";
 
 import {Resend} from "resend";
+import {configuredReplyTo} from "@/features/email/notice";
 
 import {renderInvitationEmail} from "@/features/invitations/template";
 import {invitationShareMessage, type InvitationLanguage} from "@/features/invitations/sharing";
@@ -11,7 +12,7 @@ export async function sendInvitationEmail(input: {recipient: string; language: I
   if (!apiKey || !from) return {ok: false as const, reason: "NOT_CONFIGURED" as const};
   try {
     const message = invitationShareMessage(input.language, input.link, input.kind);
-    const result = await new Resend(apiKey).emails.send({from, to: input.recipient, ...renderInvitationEmail(input.language, input.link, message, input.kind)});
+    const result = await new Resend(apiKey).emails.send({from, to: input.recipient, ...renderInvitationEmail(input.language, input.link, message, input.kind), replyTo: configuredReplyTo(from, process.env.EMAIL_REPLY_TO)});
     if (result.error || !result.data?.id) return {ok: false as const, reason: "PROVIDER_REJECTED" as const};
     return {ok: true as const};
   } catch {

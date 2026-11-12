@@ -23,6 +23,20 @@ export async function getMemberRequest(memberId: string, requestId: string) {
   return record ?? null;
 }
 
+export async function getLatestMemberDeliveryDetails(memberId: string) {
+  const [request] = await getDb().select({
+    fullName: treatmentAccessRequest.fullName,
+    telephone: treatmentAccessRequest.telephone,
+    streetAddress: treatmentAccessRequest.streetAddress,
+    flatNumber: treatmentAccessRequest.flatNumber,
+    buildingName: treatmentAccessRequest.buildingName,
+    city: treatmentAccessRequest.city,
+    postcode: treatmentAccessRequest.postcode,
+  }).from(treatmentAccessRequest).where(eq(treatmentAccessRequest.memberId, memberId))
+    .orderBy(desc(treatmentAccessRequest.createdAt)).limit(1);
+  return request ?? null;
+}
+
 export async function getAdminRequests(status?: string) {
   const rows = await getDb().select({request: treatmentAccessRequest, memberName: user.name, memberEmail: user.email})
     .from(treatmentAccessRequest).innerJoin(user, eq(treatmentAccessRequest.memberId, user.id))
@@ -61,14 +75,15 @@ export async function createTreatmentRequest(memberId: string, input: CreateTrea
         and(eq(consultationReport.sendStatus, "DELIVERED"), isNotNull(consultationReport.providerMessageId), isNotNull(consultationReport.deliveredAt)),
       ))).limit(1);
     if (!report) throw new Error("REQUEST_FORBIDDEN");
-    const [created] = await tx.insert(treatmentAccessRequest).values({memberId, ...input, message: input.message || null})
+    const address = [input.flatNumber, input.buildingName, input.streetAddress, input.city].filter(Boolean).join(", ");
+    const [created] = await tx.insert(treatmentAccessRequest).values({memberId, ...input, address, message: null})
       .onConflictDoNothing().returning();
     if (created) {
       await tx.insert(treatmentRequestStatusEvent).values({requestId: created.id, status: "SUBMITTED", changedByUserId: memberId});
       return {request: created, created: true};
     }
     const [existing] = await tx.select().from(treatmentAccessRequest).where(and(eq(treatmentAccessRequest.memberId, memberId), eq(treatmentAccessRequest.clientRequestId, input.clientRequestId))).limit(1);
-    if (!existing || existing.reportId !== input.reportId || existing.treatment !== input.treatment || existing.fullName !== input.fullName || existing.address !== input.address || existing.postcode !== input.postcode || existing.telephone !== input.telephone || (existing.message ?? "") !== (input.message ?? "")) throw new Error("REQUEST_CONFLICT");
+    if (!existing || existing.reportId !== input.reportId || existing.treatment !== input.treatment || existing.fullName !== input.fullName || existing.streetAddress !== input.streetAddress || (existing.flatNumber ?? "") !== input.flatNumber || (existing.buildingName ?? "") !== input.buildingName || existing.city !== input.city || existing.postcode !== input.postcode || existing.telephone !== input.telephone) throw new Error("REQUEST_CONFLICT");
     return {request: existing, created: false};
   });
 }

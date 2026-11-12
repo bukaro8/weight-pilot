@@ -1,5 +1,6 @@
 import "server-only";
 import {Resend} from "resend";
+import {configuredReplyTo} from "@/features/email/notice";
 import {publicInvitationOrigin} from "@/features/invitations/sharing";
 import {renderTreatmentRequestNotification} from "./email-template";
 import {renderTreatmentApprovalEmail} from "./email-template";
@@ -12,7 +13,7 @@ export async function notifyTreatmentRequest(input: {id: string; language: "en" 
   const path = input.target === "admin" ? `/${input.language}/admin/treatment-requests/${input.id}` : `/${input.language}/requests/${input.id}`;
   const url = new URL(path, origin).toString();
   try {
-    const result = await new Resend(key).emails.send({from, to: input.recipient, ...renderTreatmentRequestNotification({...input, url})}, {idempotencyKey: `treatment-request-${input.id}-${input.target}-${input.event}`});
+    const result = await new Resend(key).emails.send({from, to: input.recipient, ...renderTreatmentRequestNotification({...input, url, messagesUrl: input.target === "member" ? new URL(`/${input.language}/messages`, origin).toString() : undefined}), replyTo: configuredReplyTo(from, process.env.EMAIL_REPLY_TO)}, {idempotencyKey: `treatment-request-${input.id}-${input.target}-${input.event}`, signal: AbortSignal.timeout(12_000)});
     return {accepted: Boolean(result.data?.id) && !result.error};
   } catch { return {accepted: false}; }
 }
@@ -34,6 +35,7 @@ export async function sendTreatmentApprovalEmail(input: {
     const result = await new Resend(key).emails.send({
       from,
       to: input.recipient,
+      replyTo: configuredReplyTo(from, process.env.EMAIL_REPLY_TO),
       ...renderTreatmentApprovalEmail({
         language: input.language,
         memberName: input.memberName,

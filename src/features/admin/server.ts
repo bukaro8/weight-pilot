@@ -8,6 +8,7 @@ import {invitation, questionnaire, questionnaireReviewRequest, referral, session
 import {buildAdminDashboardData} from "@/features/admin/analytics";
 import type {AdminDashboardData, AdminReviewSummary, AdminUserDetail, AdminUserDirectoryEntry} from "@/features/admin/types";
 import {getInvitationStatus} from "@/features/invitations/server";
+import {listMemberFollowUpHistory} from "@/features/follow-ups/server";
 
 export async function listAdminReviewSummaries(): Promise<AdminReviewSummary[]> {
   const records = await getDb().select({
@@ -81,7 +82,7 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
 
 export async function getAdminUserDetail(id: string): Promise<AdminUserDetail | null> {
   const redeemer = alias(user, "profile_invitation_redeemer");
-  const [entry, [sessions], [questionnaires], createdInvitations] = await Promise.all([
+  const [entry, [sessions], [questionnaires], createdInvitations, followUpHistory] = await Promise.all([
     listAdminUsers().then((users) => users.find((candidate) => candidate.id === id) ?? null),
     getDb().select({count: count()}).from(session).where(and(eq(session.userId, id), gt(session.expiresAt, new Date()))),
     getDb().select({count: count()}).from(questionnaire).where(eq(questionnaire.userId, id)),
@@ -99,6 +100,7 @@ export async function getAdminUserDetail(id: string): Promise<AdminUserDetail | 
       .leftJoin(redeemer, eq(invitation.redeemedByUserId, redeemer.id))
       .where(eq(invitation.creatorId, id))
       .orderBy(desc(invitation.createdAt)),
+    listMemberFollowUpHistory(id),
   ]);
   if (!entry) return null;
   const created = createdInvitations.map((record) => ({
@@ -119,5 +121,6 @@ export async function getAdminUserDetail(id: string): Promise<AdminUserDetail | 
     invitationCount: created.length,
     usedInvitationCount: created.reduce((total, item) => total + item.usageCount, 0),
     createdInvitations: created,
+    followUpHistory,
   };
 }

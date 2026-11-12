@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 import test from "node:test";
+import {registerHooks} from "node:module";
 
 import {getInvitationStatus, invitationIsAvailable} from "../src/features/invitations/policy.ts";
 import {invitationShareMessage} from "../src/features/invitations/sharing.ts";
-import {renderInvitationEmail} from "../src/features/invitations/template.ts";
+
 
 const now = new Date("2026-11-01T12:00:00Z");
+registerHooks({resolve(specifier, context, nextResolve) {
+  if (specifier === "@/features/email/notice") return nextResolve(new URL("../src/features/email/notice.ts", import.meta.url).href, context);
+  return nextResolve(specifier, context);
+}});
+const {renderInvitationEmail} = await import("../src/features/invitations/template.ts");
 
 test("standard invitations remain seven-day, single-use invitations", () => {
   const available = {kind: "STANDARD", redeemedAt: null, revokedAt: null, expiresAt: new Date("2026-11-02T12:00:00Z")};

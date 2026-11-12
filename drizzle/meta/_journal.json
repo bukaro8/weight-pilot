@@ -141,6 +141,20 @@
       "when": 1793447852381,
       "tag": "0019_young_firebird",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794522541389,
+      "tag": "0020_orange_jocasta",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1794525566001,
+      "tag": "0021_legal_ser_duncan",
+      "breakpoints": true
     }
   ]
 }

@@ -2,6 +2,7 @@ import "server-only";
 
 import {eq} from "drizzle-orm";
 import {Resend} from "resend";
+import {configuredReplyTo, renderNoReplyNotice} from "@/features/email/notice";
 
 import {getDb} from "@/db";
 import {user} from "@/db/schema";
@@ -57,9 +58,10 @@ async function getPreferredLanguage(userId: string): Promise<Language> {
 function renderEmail(options: {language: Language; name: string; heading: string; body: string; button: string; url: string}) {
   const translated = copy[options.language];
   const safeUrl = escapeHtml(options.url);
+  const notice = renderNoReplyNotice(options.language);
   return {
-    html: `<!doctype html><html lang="${options.language}"><body style="margin:0;background:#FBF8F5;color:#1A2433;font-family:Inter,Arial,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:32px 16px;background:#FBF8F5"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#FFFFFF;border:1px solid #E6DFD9;border-radius:20px;overflow:hidden"><tr><td style="height:8px;background:#E9C9C0"></td></tr><tr><td style="padding:36px 32px"><p style="margin:0 0 28px;color:#1E3A5F;font-family:Georgia,serif;font-size:25px;font-weight:700">WeightPilot</p><p style="margin:0 0 12px;font-size:16px">${escapeHtml(translated.greeting(options.name))}</p><h1 style="margin:0 0 16px;color:#142A47;font-family:Georgia,serif;font-size:30px;line-height:1.2">${escapeHtml(options.heading)}</h1><p style="margin:0 0 26px;color:#5B6779;font-size:16px;line-height:1.65">${escapeHtml(options.body)}</p><a href="${safeUrl}" style="display:inline-block;padding:14px 24px;border-radius:999px;background:#1E3A5F;color:#FFFFFF;font-size:15px;font-weight:700;text-decoration:none">${escapeHtml(options.button)}</a><p style="margin:28px 0 8px;color:#5B6779;font-size:14px;line-height:1.55">${escapeHtml(translated.ignore)}</p><p style="margin:0;color:#5B6779;font-size:12px;line-height:1.5">${escapeHtml(translated.linkHelp)}<br><a href="${safeUrl}" style="color:#1E3A5F;word-break:break-all">${safeUrl}</a></p></td></tr></table></td></tr></table></body></html>`,
-    text: `${translated.greeting(options.name)}\n\n${options.heading}\n\n${options.body}\n\n${options.button}: ${options.url}\n\n${translated.ignore}`,
+    html: `<!doctype html><html lang="${options.language}"><body style="margin:0;background:#FBF8F5;color:#1A2433;font-family:Inter,Arial,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:32px 16px;background:#FBF8F5"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#FFFFFF;border:1px solid #E6DFD9;border-radius:20px;overflow:hidden"><tr><td style="height:8px;background:#E9C9C0"></td></tr><tr><td style="padding:36px 32px"><p style="margin:0 0 28px;color:#1E3A5F;font-family:Georgia,serif;font-size:25px;font-weight:700">WeightPilot</p><p style="margin:0 0 12px;font-size:16px">${escapeHtml(translated.greeting(options.name))}</p><h1 style="margin:0 0 16px;color:#142A47;font-family:Georgia,serif;font-size:30px;line-height:1.2">${escapeHtml(options.heading)}</h1><p style="margin:0 0 26px;color:#5B6779;font-size:16px;line-height:1.65">${escapeHtml(options.body)}</p><a href="${safeUrl}" style="display:inline-block;padding:14px 24px;border-radius:999px;background:#1E3A5F;color:#FFFFFF;font-size:15px;font-weight:700;text-decoration:none">${escapeHtml(options.button)}</a><p style="margin:28px 0 8px;color:#5B6779;font-size:14px;line-height:1.55">${escapeHtml(translated.ignore)}</p><p style="margin:0;color:#5B6779;font-size:12px;line-height:1.5">${escapeHtml(translated.linkHelp)}<br><a href="${safeUrl}" style="color:#1E3A5F;word-break:break-all">${safeUrl}</a></p></td></tr><tr><td style="padding:16px 32px;background:#F6ECE8">${notice.html}</td></tr></table></td></tr></table></body></html>`,
+    text: `${translated.greeting(options.name)}\n\n${options.heading}\n\n${options.body}\n\n${options.button}: ${options.url}\n\n${translated.ignore}\n\n${notice.text}`,
   };
 }
 
@@ -83,6 +85,7 @@ async function sendAuthenticationEmail(message: AuthenticationEmail, kind: "veri
   try {
     await new Resend(apiKey).emails.send({
       from, to: message.email,
+      replyTo: configuredReplyTo(from, process.env.EMAIL_REPLY_TO),
       subject: isVerification ? translated.verificationSubject : translated.resetSubject,
       ...email,
     });

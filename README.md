@@ -227,6 +227,14 @@ fi
 
 The bootstrap is repeat-safe and never overwrites an administrator. Never keep credentials in the long-lived `.env`. Review `docker compose logs --tail=100 app` after deploy. Do not run `docker compose down -v`, reset the database, or prune volumes. A code rollback does not automatically roll back database migrations.
 
+## Manual member follow-ups
+
+The administrator can send individual reminders from **Admin → Member follow-ups** for incomplete assessments or approved treatment next steps. Every send requires an explicit preview and confirmation; no scheduled reminders are sent. The member's verified account email is selected server-side. Recent sends, delivery status and opt-out preferences are recorded in migration `0020`. Follow-up history is visible on each member's admin profile.
+
+Production requires the existing `PUBLIC_APP_URL`, `RESEND_API_KEY` and `EMAIL_FROM` settings. Optionally set `EMAIL_REPLY_TO` to a real, non-monitored mailbox on the same verified sender domain; leave it blank otherwise. Notification emails include a bilingual no-reply notice. Member follow-ups link directly to private WeightPilot messaging.
+
+The next normal deployment applies migration `0020` through the existing safe migration gate before starting the app. No administrator account changes or background jobs are needed.
+
 ## Database migrations
 
 Generate migration files after an intentional schema change:
@@ -241,7 +249,7 @@ Commit the generated `drizzle/` files. Production Docker startup applies them au
 docker compose run --rm migrate
 ```
 
-`npm run db:migrate` uses Drizzle's migration-file reader and SHA-256 hashing, retaining the standard `drizzle.__drizzle_migrations` table, timestamps and pending-selection semantics. Preflight, pending SQL and journal inserts share one locked transaction; failure rolls back the batch without changing earlier history. It does not use schema push or load development tooling. The committed journal contains `0000`–`0011`. Existing SQL and hashes must never be edited after deployment.
+`npm run db:migrate` uses Drizzle's migration-file reader and SHA-256 hashing, retaining the standard `drizzle.__drizzle_migrations` table, timestamps and pending-selection semantics. Preflight, pending SQL and journal inserts share one locked transaction; failure rolls back the batch without changing earlier history. It does not use schema push or load development tooling. The committed journal contains `0000`–`0021`. Existing SQL and hashes must never be edited after deployment.
 
 The preflight stops if a pending migration would drop a non-empty legacy `profiles` table. Back up and inspect those records before deliberately preserving them and retrying. Production has not been accessed by this change.
 

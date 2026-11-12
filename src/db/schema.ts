@@ -32,6 +32,8 @@ export const sexAssignedAtBirth = pgEnum("sex_assigned_at_birth", ["FEMALE", "MA
 export const referenceTreatment = pgEnum("reference_treatment", ["SEMAGLUTIDE", "TIRZEPATIDE"]);
 export const referenceDeliveryMethod = pgEnum("reference_delivery_method", ["STANDARD_NEXT_DAY", "GUARANTEED_NEXT_DAY"]);
 export const treatmentRequestStatus = pgEnum("treatment_request_status", ["SUBMITTED", "UNDER_REVIEW", "APPROVED_FOR_NEXT_STEPS", "DECLINED", "CANCELLED"]);
+export const followUpCategory = pgEnum("follow_up_category", ["INCOMPLETE_ASSESSMENT", "TREATMENT_FOLLOW_UP"]);
+export const followUpSendStatus = pgEnum("follow_up_send_status", ["SENDING", "ACCEPTED", "DELIVERED", "FAILED", "UNCERTAIN"]);
 
 export const user = pgTable(
   "user",
@@ -330,6 +332,10 @@ export const treatmentAccessRequest = pgTable("treatment_access_request", {
   approvalEmailAcceptedAt: timestamp("approval_email_accepted_at", {withTimezone: true}),
   fullName: text("full_name").notNull(),
   address: text("address").notNull(),
+  streetAddress: text("street_address"),
+  flatNumber: text("flat_number"),
+  buildingName: text("building_name"),
+  city: text("city"),
   postcode: text("postcode").notNull(),
   telephone: text("telephone").notNull(),
   message: text("message"),
@@ -428,6 +434,34 @@ export const privateMessage = pgTable(
   ],
 );
 
+export const memberFollowUpPreference = pgTable("member_follow_up_preference", {
+  memberId: uuid("member_id").primaryKey().references(() => user.id, {onDelete: "cascade"}),
+  doNotRemind: boolean("do_not_remind").notNull().default(false),
+  updatedAt: timestamp("updated_at", {withTimezone: true}).notNull().defaultNow(),
+  updatedByAdminId: uuid("updated_by_admin_id").references(() => user.id, {onDelete: "set null"}),
+});
+
+export const memberFollowUp = pgTable("member_follow_up", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  clientActionId: uuid("client_action_id").notNull().unique(),
+  memberId: uuid("member_id").notNull().references(() => user.id, {onDelete: "cascade"}),
+  adminId: uuid("admin_id").references(() => user.id, {onDelete: "set null"}),
+  category: followUpCategory("category").notNull(),
+  subject: text("subject").notNull(),
+  language: preferredLanguage("language").notNull(),
+  sendStatus: followUpSendStatus("send_status").notNull().default("SENDING"),
+  providerMessageId: text("provider_message_id").unique(),
+  createdAt: timestamp("created_at", {withTimezone: true}).notNull().defaultNow(),
+  acceptedAt: timestamp("accepted_at", {withTimezone: true}),
+  deliveredAt: timestamp("delivered_at", {withTimezone: true}),
+  failedAt: timestamp("failed_at", {withTimezone: true}),
+  failureCode: text("failure_code"),
+}, (table) => [
+  index("member_follow_up_member_category_date_idx").on(table.memberId, table.category, table.createdAt),
+  index("member_follow_up_admin_date_idx").on(table.adminId, table.createdAt),
+  check("member_follow_up_subject_length_check", sql`char_length(trim(${table.subject})) between 3 and 160`),
+]);
+
 export const userRelations = relations(user, ({many}) => ({
   sessions: many(session),
   accounts: many(account),
@@ -438,6 +472,7 @@ export const userRelations = relations(user, ({many}) => ({
   questionnaires: many(questionnaire),
   questionnaireReviewRequests: many(questionnaireReviewRequest, {relationName: "reviewRequester"}),
   questionnaireReviewUpdates: many(questionnaireReviewRequest, {relationName: "reviewAdmin"}),
+  followUps: many(memberFollowUp, {relationName: "followUpMember"}),
   reportDraftUpdates: many(consultationReport, {relationName: "reportUpdatedBy"}),
   reportsSent: many(consultationReport, {relationName: "reportSentBy"}),
   reportDeliveryAttempts: many(reportDeliveryAttempt),
