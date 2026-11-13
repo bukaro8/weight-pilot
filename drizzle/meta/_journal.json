@@ -162,6 +162,13 @@
       "when": 1794528213331,
       "tag": "0022_known_the_hand",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794530397315,
+      "tag": "0023_white_yellowjacket",
+      "breakpoints": true
     }
   ]
 }

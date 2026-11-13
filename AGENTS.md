@@ -77,7 +77,7 @@ WeightPilot is a private, personalised weight-management information and guidanc
 - BMI and target weight-loss percentage are informational calculations only. Do not use questionnaire answers to diagnose, prescribe, determine treatment suitability, promise results, calculate prices or generate AI recommendations.
 
 ## Reference pricing
-- Store all monetary amounts as integer pence. Treatment reference prices use monthly tiers for semaglutide and tirzepatide; delivery reference prices remain separate.
+- Store all monetary amounts as integer pence. Exact product-strength prices are managed separately from legacy monthly tiers, which remain for historical cost projections and report compatibility. Never infer a payment price from a month tier.
 - Only an active, verified `ADMIN` may update reference prices. Every pricing mutation must re-check the authoritative database user and validate the full price set server-side.
 - Pricing seeds are explicit and idempotent. They insert missing defaults only and must never overwrite administrator-edited values.
 - Cost scenarios are illustrative and assume one purchase and one delivery per month. They must remain independent from questionnaire answers, medical dose recommendations and treatment suitability.
@@ -101,6 +101,7 @@ WeightPilot is a private, personalised weight-management information and guidanc
 - Health copy must not imply diagnosis, guaranteed outcomes or emergency care.
 - External AI is administrator-operated only: the administrator may explicitly request an OpenAI Structured Outputs comparison or copy the privacy-safe prompt manually. No member-facing AI API calls are permitted; generated JSON remains a draft requiring human review and explicit approval before sending.
 - Administrator guidance reports require human review. Use only the verified account email, escape all report content, prevent duplicate sending, and mark a review `COMPLETED` only after a verified delivery webhook.
+- Treatment-request decisions remain immutable. Each outgoing member communication has its own saved subject, rendered content, product/strength, financial snapshot where relevant, provider ID and delivery state. Payment instructions require a separate recorded prescription and lawful supply authorisation for the exact product and strength; administrative approval alone never triggers them. Legacy emails without saved content must be labelled as such rather than reconstructed as exact originals.
 - AI research prompts must exclude names, email addresses, account identifiers and referral data, and must explicitly treat questionnaire answers as untrusted data.
 
 ## Design

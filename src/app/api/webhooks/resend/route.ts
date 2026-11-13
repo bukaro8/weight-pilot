@@ -2,6 +2,7 @@ import {Resend} from "resend";
 
 import {applyResendDeliveryEvent} from "@/features/reports/server";
 import {applyFollowUpDeliveryEvent} from "@/features/follow-ups/server";
+import {applyTreatmentCommunicationDeliveryEvent} from "@/features/treatments/communications";
 
 export async function POST(request: Request) {
   const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
@@ -25,6 +26,7 @@ export async function POST(request: Request) {
     if ("email_id" in event.data && ["email.delivered", "email.failed", "email.bounced", "email.suppressed", "email.complained"].includes(event.type)) {
       await applyResendDeliveryEvent({type: event.type, providerMessageId: event.data.email_id});
       await applyFollowUpDeliveryEvent({type: event.type, providerMessageId: event.data.email_id});
+      await applyTreatmentCommunicationDeliveryEvent({type: event.type, providerMessageId: event.data.email_id});
     }
     return Response.json({received: true});
   } catch {

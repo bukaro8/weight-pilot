@@ -1,0 +1,16 @@
+import {getTranslations} from "next-intl/server";
+import {Link} from "@/i18n/navigation";
+import {formatPenceWithPoundSymbol} from "@/features/treatments/presentation";
+
+type Communication = {
+  id: string; type: "DECISION_NOTICE" | "ADMIN_UPDATE" | "PAYMENT_INSTRUCTIONS";
+  treatment: "SEMAGLUTIDE" | "TIRZEPATIDE" | null; strength: string | null;
+  recipient: string | null; sendStatus: string; deliveryStatus: string;
+  totalPence: number | null; attemptedAt: Date; html: string | null;
+};
+
+export async function CommunicationHistory({requestId, locale, rows}: {requestId: string; locale: "en" | "es"; rows: Communication[]}) {
+  const t = await getTranslations("treatments.communications");
+  const date = new Intl.DateTimeFormat(locale, {dateStyle: "medium", timeStyle: "short", timeZone: "Europe/London"});
+  return <section className="mt-8 rounded-3xl border border-border bg-surface p-5 sm:p-7" aria-labelledby="communication-history-title"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 id="communication-history-title" className="font-display text-2xl text-primary-dark">{t("historyTitle")}</h2><p className="mt-1 text-sm leading-6 text-muted">{t("historyIntro")}</p></div><Link href={`/admin/treatment-requests/${requestId}/emails/new`} className="inline-flex min-h-12 items-center justify-center rounded-full bg-primary px-6 font-semibold text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">{t("compose")}</Link></div>{rows.length ? <ol className="mt-6 space-y-3">{rows.map((row) => <li key={row.id} className="rounded-2xl border border-border bg-background p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-semibold text-primary-dark">{t(`types.${row.type}`)}</p><p className="mt-1 text-sm text-muted"><time dateTime={row.attemptedAt.toISOString()}>{date.format(row.attemptedAt)}</time></p></div><span className="rounded-full bg-mist-blue px-3 py-1 text-xs font-semibold text-primary-dark">{t(`statuses.${row.sendStatus}`)}</span></div><dl className="mt-3 grid gap-x-5 gap-y-1 text-sm sm:grid-cols-2"><div><dt className="inline text-muted">{t("product")}: </dt><dd className="inline font-medium text-primary-dark">{row.treatment ? `${t(`treatments.${row.treatment}`)} · ${row.strength ?? "—"}` : "—"}</dd></div><div><dt className="inline text-muted">{t("recipient")}: </dt><dd className="inline break-all font-medium text-primary-dark">{row.recipient ?? t("notRecorded")}</dd></div><div><dt className="inline text-muted">{t("delivery")}: </dt><dd className="inline font-medium text-primary-dark">{t(`deliveryStatuses.${row.deliveryStatus}`)}</dd></div>{row.totalPence !== null ? <div><dt className="inline text-muted">{t("amount")}: </dt><dd className="inline font-semibold text-primary-dark">{formatPenceWithPoundSymbol(row.totalPence, locale)}</dd></div> : null}</dl><Link href={`/admin/treatment-requests/${requestId}/emails/${row.id}`} className="mt-3 inline-flex min-h-11 items-center font-semibold text-primary underline underline-offset-4">{row.html ? t("viewEmail") : t("viewLegacy")}</Link></li>)}</ol> : <p className="mt-6 rounded-2xl bg-mist-blue p-5 text-sm text-primary-dark">{t("empty")}</p>}</section>;
+}

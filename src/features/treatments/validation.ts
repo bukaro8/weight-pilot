@@ -52,8 +52,25 @@ export type CreateTreatmentRequest = z.infer<typeof createTreatmentRequestSchema
 export type UpdateTreatmentRequest = z.infer<typeof updateTreatmentRequestSchema>;
 
 export const paymentAuthorisationSchema = z.object({
+  treatment: treatmentSchema,
+  strength: z.string().trim().max(20),
   prescriptionReference: z.string().trim().min(3).max(160),
   supplyAuthorisationReference: z.string().trim().min(3).max(160),
   prescribingVerified: z.literal(true),
   supplyVerified: z.literal(true),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (!(approvedStrengths[value.treatment] as readonly string[]).includes(value.strength)) context.addIssue({code: "custom", path: ["strength"], message: "Choose a listed strength."});
+});
+
+export const treatmentCommunicationSchema = z.object({
+  clientMessageId: z.uuid(),
+  type: z.enum(["ADMIN_UPDATE", "PAYMENT_INSTRUCTIONS"]),
+  treatment: treatmentSchema,
+  strength: z.string().trim().max(20),
+  message: z.string().trim().max(2000),
+  authorisationId: z.uuid().nullable(),
+}).strict().superRefine((value, context) => {
+  if (!(approvedStrengths[value.treatment] as readonly string[]).includes(value.strength)) context.addIssue({code: "custom", path: ["strength"], message: "Choose a listed strength."});
+  if (value.type === "ADMIN_UPDATE" && value.message.length < 5) context.addIssue({code: "custom", path: ["message"], message: "Add a short update."});
+  if (value.type === "PAYMENT_INSTRUCTIONS" && !value.authorisationId) context.addIssue({code: "custom", path: ["authorisationId"], message: "Verified supply authorisation is required."});
+});

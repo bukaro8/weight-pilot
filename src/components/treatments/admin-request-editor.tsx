@@ -20,6 +20,7 @@ export function AdminRequestEditor({id, initial}: {id: string; initial: {status:
   const pending = initial.status === "SUBMITTED" || initial.status === "UNDER_REVIEW";
   const lockedApproval = initial.status === "APPROVED_FOR_NEXT_STEPS";
   const strengths = value.approvedTreatment ? approvedStrengths[value.approvedTreatment] : [];
+  if (!pending) return <section className="rounded-3xl border border-border bg-surface p-5 sm:p-7"><h2 className="font-display text-2xl text-primary-dark">{t("decision")}</h2><p className="mt-4 inline-flex rounded-full bg-mist-blue px-4 py-2 text-sm font-semibold text-primary-dark">{t(initial.status)}</p>{initial.approvedTreatment && initial.approvedStrength ? <p className="mt-4 text-sm text-primary-dark"><span className="font-semibold">{t("approvedProductAndStrength")}:</span> {t(initial.approvedTreatment === "SEMAGLUTIDE" ? "semaglutide" : "tirzepatide")} · {initial.approvedStrength}</p> : null}<p className="mt-4 text-sm leading-6 text-muted">{t("statusCaution")}</p></section>;
   const save = async (event: React.FormEvent) => {
     event.preventDefault(); if (busy) return;
     const parsed = treatmentDecisionSchema.safeParse(value);

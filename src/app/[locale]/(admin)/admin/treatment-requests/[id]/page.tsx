@@ -6,18 +6,17 @@ import {requireAdmin} from "@/lib/authorization";
 import {getAdminRequest} from "@/features/treatments/server";
 import {AdminRequestEditor} from "@/components/treatments/admin-request-editor";
 import {MarkNotificationViewed} from "@/components/navigation/mark-notification-viewed";
-import {PaymentInstructionPanel} from "@/components/treatments/payment-instruction-panel";
-import {getStrengthPrices} from "@/features/pricing/server";
+import {CommunicationHistory} from "@/components/treatments/communication-history";
+import {listTreatmentCommunications} from "@/features/treatments/communications";
 
 export default async function AdminRequestPage({params}: {params: Promise<{locale: Locale; id: string}>}) {
   const {locale, id} = await params;
   setRequestLocale(locale);
-  await requireAdmin(locale, `/admin/treatment-requests/${id}`);
+  const admin = await requireAdmin(locale, `/admin/treatment-requests/${id}`);
   const detail = await getAdminRequest(id);
   if (!detail) notFound();
-  const {request, memberName, memberEmail, reviewRequestId, conversationId, events, payment} = detail;
-  const strengthPrices = await getStrengthPrices();
-  const approvedPrice = strengthPrices.find((row) => row.treatment === request.approvedTreatment && row.strength === request.approvedStrength)?.pricePence ?? null;
+  const {request, memberName, memberEmail, reviewRequestId, conversationId, events} = detail;
+  const communications = await listTreatmentCommunications(admin.id, id);
   const t = await getTranslations("treatments");
   const date = (value: Date) => new Intl.DateTimeFormat(locale, {dateStyle: "medium", timeStyle: "short"}).format(value);
 
@@ -45,9 +44,8 @@ export default async function AdminRequestPage({params}: {params: Promise<{local
         </section>
         <section className="rounded-3xl border border-border bg-surface p-5 sm:p-7"><h2 className="font-display text-2xl text-primary-dark">{t("history")}</h2><ol className="mt-4 space-y-3">{events.map((event) => <li key={`${event.status}-${event.createdAt.toISOString()}`} className="flex flex-wrap justify-between gap-2 border-b border-border pb-3 text-sm"><span className="font-semibold text-primary-dark">{t(event.status)}</span><time className="text-muted" dateTime={event.createdAt.toISOString()}>{date(event.createdAt)}</time></li>)}</ol></section>
       </div>
-      <div className="space-y-5"><AdminRequestEditor id={id} initial={{status: request.status, internalNote: request.internalNote ?? "", declineReason: request.declineReason ?? "", approvedTreatment: request.approvedTreatment, approvedStrength: request.approvedStrength}}/>
-        {request.status === "APPROVED_FOR_NEXT_STEPS" && request.approvedTreatment && request.approvedStrength ? <PaymentInstructionPanel id={id} treatment={request.approvedTreatment} strength={request.approvedStrength} pricePence={approvedPrice} sendStatus={payment?.sendStatus ?? null} snapshot={payment ? {itemPricePence: payment.itemPricePence, deliveryPricePence: payment.deliveryPricePence, totalPence: payment.totalPence} : null}/> : null}
-      </div>
+      <AdminRequestEditor id={id} initial={{status: request.status, internalNote: request.internalNote ?? "", declineReason: request.declineReason ?? "", approvedTreatment: request.approvedTreatment, approvedStrength: request.approvedStrength}}/>
     </div>
+    <CommunicationHistory requestId={id} locale={locale} rows={communications}/>
   </main>;
 }

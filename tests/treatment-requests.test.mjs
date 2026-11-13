@@ -3,7 +3,7 @@ import test from "node:test";
 import {readFileSync} from "node:fs";
 import {registerHooks} from "node:module";
 import {canBrowseTreatments, canChangeRequestStatus} from "../src/features/treatments/policy.ts";
-import {createTreatmentRequestSchema, normaliseUkPostcode, paymentAuthorisationSchema, treatmentDecisionSchema} from "../src/features/treatments/validation.ts";
+import {createTreatmentRequestSchema, normaliseUkPostcode, paymentAuthorisationSchema, treatmentCommunicationSchema, treatmentDecisionSchema} from "../src/features/treatments/validation.ts";
 import {formatPenceWithPoundSymbol, treatmentCardHref, treatmentFromPath, treatmentItems} from "../src/features/treatments/presentation.ts";
 
 import {catalogueDosePriceRows, catalogueDoseStages} from "../src/features/treatments/dose-stages.ts";
@@ -15,7 +15,7 @@ registerHooks({resolve(specifier, context, nextResolve) {
   if (specifier === "@/features/email/notice") return nextResolve(new URL("../src/features/email/notice.ts", import.meta.url).href, context);
   return nextResolve(specifier, context);
 }});
-const {renderTreatmentApprovalEmail, renderTreatmentPaymentEmail, renderTreatmentRequestNotification} = await import("../src/features/treatments/email-template.ts");
+const {renderTreatmentApprovalEmail, renderTreatmentPaymentEmail, renderTreatmentRequestNotification, renderTreatmentUpdateEmail} = await import("../src/features/treatments/email-template.ts");
 const {calculatePaymentSnapshot, paymentEnvironmentConfigured} = await import("../src/features/treatments/payment.ts");
 
 test("catalogue requires verified active USER and an available report", () => {
@@ -158,7 +158,7 @@ test("payment uses exact approved strength price and freezes 480 pence delivery"
 });
 
 test("payment requires two explicit authorisation confirmations and references", () => {
-  const valid = {prescriptionReference: "RX-2026-123", supplyAuthorisationReference: "SUP-2026-123", prescribingVerified: true, supplyVerified: true};
+  const valid = {treatment: "TIRZEPATIDE", strength: "5 mg", prescriptionReference: "RX-2026-123", supplyAuthorisationReference: "SUP-2026-123", prescribingVerified: true, supplyVerified: true};
   assert.equal(paymentAuthorisationSchema.safeParse(valid).success, true);
   assert.equal(paymentAuthorisationSchema.safeParse({...valid, supplyVerified: false}).success, false);
   assert.equal(paymentAuthorisationSchema.safeParse({...valid, prescriptionReference: ""}).success, false);
@@ -181,7 +181,22 @@ test("authorised payment email is bilingual, priced, escaped, and links to priva
   assert.match(es.html, /&lt;script&gt;/);
 });
 
-test("payment email uses a stable idempotency key and distinguishes acceptance, rejection and timeout", async () => {
+test("communication validation permits different products and strengths after a final decision", () => {
+  const base = {clientMessageId: "e398738d-c91e-45a2-9b98-14e32d812531", type: "ADMIN_UPDATE", treatment: "SEMAGLUTIDE", strength: "0.25 mg", message: "Please review the next steps in your account.", authorisationId: null};
+  assert.equal(treatmentCommunicationSchema.safeParse(base).success, true);
+  assert.equal(treatmentCommunicationSchema.safeParse({...base, treatment: "TIRZEPATIDE", strength: "15 mg"}).success, true);
+  assert.equal(treatmentCommunicationSchema.safeParse({...base, treatment: "TIRZEPATIDE", strength: "0.25 mg"}).success, false);
+  assert.equal(treatmentCommunicationSchema.safeParse({...base, type: "PAYMENT_INSTRUCTIONS"}).success, false);
+  assert.equal(treatmentCommunicationSchema.safeParse({...base, type: "PAYMENT_INSTRUCTIONS", authorisationId: "e398738d-c91e-45a2-9b98-14e32d812532"}).success, true);
+  const en = renderTreatmentUpdateEmail({language: "en", memberName: "Member", treatment: "SEMAGLUTIDE", strength: "1 mg", message: "Next steps <script>", messagesUrl: "https://weightpilot.uk/en/messages", imageUrl: "https://weightpilot.uk/treatments/semaglutide.jpg"});
+  const es = renderTreatmentUpdateEmail({language: "es", memberName: "Member", treatment: "TIRZEPATIDE", strength: "15 mg", message: "Consulta tus próximos pasos.", messagesUrl: "https://weightpilot.uk/es/messages", imageUrl: "https://weightpilot.uk/treatments/tirzepatide.jpg"});
+  assert.match(en.html, /Illustrative image/);
+  assert.match(es.html, /Imagen ilustrativa/);
+  assert.doesNotMatch(en.html, /<script>/);
+  assert.match(en.html, /&lt;script&gt;/);
+});
+
+test("each email submission uses its own stable idempotency key and separates provider outcomes", async () => {
   registerHooks({resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") return {url: "data:text/javascript,export%20default%20undefined", shortCircuit: true};
     if (specifier === "resend") return {url: `data:text/javascript,${encodeURIComponent("export class Resend { constructor() { this.emails = {send: async (...args) => { globalThis.__paymentMailCalls.push(args); if (globalThis.__paymentMailOutcome === 'timeout') throw new Error('timeout'); return globalThis.__paymentMailOutcome; }}; }}")}`, shortCircuit: true};
@@ -189,37 +204,58 @@ test("payment email uses a stable idempotency key and distinguishes acceptance, 
     if (specifier.startsWith("@/")) return nextResolve(new URL(`../src/${specifier.slice(2)}.ts`, import.meta.url).href, context);
     return nextResolve(specifier, context);
   }});
-  const {sendTreatmentPaymentEmail} = await import("../src/features/treatments/email.ts");
-  const names = ["RESEND_API_KEY", "EMAIL_FROM", "PUBLIC_APP_URL", "ACCOUNT_NAME", "SORT_CODE", "ACCOUNT_NUMBER"];
-  const env = Object.fromEntries(names.map((key) => [key, process.env[key]]));
-  Object.assign(process.env, {RESEND_API_KEY: "test-key", EMAIL_FROM: "sender@example.invalid", PUBLIC_APP_URL: "https://weightpilot.uk", ACCOUNT_NAME: "Example Account", SORT_CODE: "12 34 56", ACCOUNT_NUMBER: "12345678"});
+  const {submitTreatmentCommunication} = await import("../src/features/treatments/email.ts");
+  const env = Object.fromEntries(["RESEND_API_KEY", "EMAIL_FROM"].map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {RESEND_API_KEY: "test-key", EMAIL_FROM: "sender@example.invalid"});
   globalThis.__paymentMailCalls = [];
-  const input = {id: "request-123", language: "en", recipient: "verified@example.invalid", memberName: "Member", snapshot: calculatePaymentSnapshot({treatment: "TIRZEPATIDE", strength: "5 mg", pricePence: 7500})};
   try {
     globalThis.__paymentMailOutcome = {data: {id: "resend-accepted"}, error: null};
-    assert.equal((await sendTreatmentPaymentEmail(input)).providerMessageId, "resend-accepted");
-    assert.equal(globalThis.__paymentMailCalls[0][0].to, input.recipient);
-    assert.equal(globalThis.__paymentMailCalls[0][1].idempotencyKey, "weightpilot-treatment-payment-request-123");
-    assert.match(globalThis.__paymentMailCalls[0][0].html, /£79.80/);
+    assert.equal((await submitTreatmentCommunication("email-one", "verified@example.invalid", {subject: "Update", html: "<p>Update</p>"})).status, "ACCEPTED");
+    assert.equal((await submitTreatmentCommunication("email-two", "verified@example.invalid", {subject: "Another", html: "<p>Another</p>"})).status, "ACCEPTED");
+    assert.equal(globalThis.__paymentMailCalls[0][1].idempotencyKey, "weightpilot-treatment-communication-email-one");
+    assert.equal(globalThis.__paymentMailCalls[1][1].idempotencyKey, "weightpilot-treatment-communication-email-two");
     globalThis.__paymentMailOutcome = {data: null, error: {message: "rejected"}};
-    assert.equal((await sendTreatmentPaymentEmail(input)).reason, "REJECTED");
+    assert.equal((await submitTreatmentCommunication("email-three", "verified@example.invalid", {subject: "Update", html: "<p>Update</p>"})).status, "FAILED");
     globalThis.__paymentMailOutcome = "timeout";
-    assert.equal((await sendTreatmentPaymentEmail(input)).reason, "UNCERTAIN");
+    assert.equal((await submitTreatmentCommunication("email-four", "verified@example.invalid", {subject: "Update", html: "<p>Update</p>"})).status, "UNCERTAIN");
   } finally {
     for (const [key, value] of Object.entries(env)) {if (value === undefined) delete process.env[key]; else process.env[key] = value;}
     delete globalThis.__paymentMailCalls; delete globalThis.__paymentMailOutcome;
   }
 });
 
-test("payment route requires verified authorisation and cannot send on approval alone", () => {
-  const route = readFileSync(new URL("../src/app/api/admin/treatment-requests/[id]/payment/route.ts", import.meta.url), "utf8");
-  const server = readFileSync(new URL("../src/features/treatments/server.ts", import.meta.url), "utf8");
-  const approvalRoute = readFileSync(new URL("../src/app/api/admin/treatment-requests/[id]/route.ts", import.meta.url), "utf8");
-  assert.match(route, /paymentAuthorisationSchema/);
-  assert.match(route, /claimTreatmentPaymentInstruction/);
-  assert.match(server, /treatmentStrengthPrice\.strength, request\.approvedStrength/);
-  assert.match(server, /treatmentPaymentInstruction/);
-  assert.doesNotMatch(approvalRoute, /sendTreatmentPaymentEmail/);
+test("new communication records preserve snapshots, request decisions, and provider delivery history", () => {
+  const migration = readFileSync(new URL("../drizzle/0023_white_yellowjacket.sql", import.meta.url), "utf8");
+  const schema = readFileSync(new URL("../src/db/schema.ts", import.meta.url), "utf8");
+  const server = readFileSync(new URL("../src/features/treatments/communications.ts", import.meta.url), "utf8");
+  const route = readFileSync(new URL("../src/app/api/admin/treatment-requests/[id]/emails/route.ts", import.meta.url), "utf8");
+  const webhook = readFileSync(new URL("../src/app/api/webhooks/resend/route.ts", import.meta.url), "utf8");
+  assert.match(schema, /treatmentRequestCommunication = pgTable/);
+  assert.match(schema, /clientMessageId: uuid/);
+  assert.doesNotMatch(schema, /requestId: uuid\("request_id"\)\.primaryKey\(\).*communication/);
+  assert.match(migration, /ON CONFLICT \(\"treatment\", \"strength\"\) DO NOTHING/);
+  assert.match(migration, /FROM \"treatment_payment_instruction\" p/);
+  assert.match(migration, /FROM \"treatment_access_request\" r/);
+  assert.match(server, /clientMessageId: input.clientMessageId/);
+  assert.match(server, /subject: prepared.content.subject, html: prepared.content.html/);
+  assert.match(server, /price\?\.pricePence !== prepared.snapshot\?\.itemPricePence/);
+  assert.match(server, /treatmentSupplyAuthorisation.strength, input.strength/);
+  assert.match(server, /eq\(treatmentRequestCommunication.requestId, requestId\), eq\(treatmentRequestCommunication.id, emailId\)/);
+  assert.match(route, /getAdminApiUser\(request\)/);
+  assert.match(webhook, /applyTreatmentCommunicationDeliveryEvent/);
+});
+
+test("all eleven exact-strength defaults are inserted without overwriting existing prices", () => {
+  const migration = readFileSync(new URL("../drizzle/0023_white_yellowjacket.sql", import.meta.url), "utf8");
+  const expected = {"TIRZEPATIDE:2.5 mg": 5500, "TIRZEPATIDE:5 mg": 7500, "TIRZEPATIDE:7.5 mg": 10000, "TIRZEPATIDE:10 mg": 11500, "TIRZEPATIDE:12.5 mg": 12000, "TIRZEPATIDE:15 mg": 12000, "SEMAGLUTIDE:0.25 mg": 3200, "SEMAGLUTIDE:0.5 mg": 4600, "SEMAGLUTIDE:1 mg": 6000, "SEMAGLUTIDE:1.7 mg": 7000, "SEMAGLUTIDE:2.4 mg": 7500};
+  for (const [key, price] of Object.entries(expected)) {
+    const [treatment, strength] = key.split(":");
+    assert.ok(migration.includes(`('${treatment}', '${strength}', ${price})`), key);
+  }
+  assert.match(migration, /ON CONFLICT \(\"treatment\", \"strength\"\) DO NOTHING/);
+  const pricing = readFileSync(new URL("../src/components/pricing/pricing-management.tsx", import.meta.url), "utf8");
+  assert.match(pricing, /StrengthPriceEditor initialData/);
+  assert.doesNotMatch(pricing, /t\("month",/);
 });
 
 test("report treatment CTA eligibility requires a clear treatment suggestion", () => {

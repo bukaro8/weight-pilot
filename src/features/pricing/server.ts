@@ -14,7 +14,7 @@ import {
   type ReferenceMonthTier,
   type ReferenceTreatment,
 } from "@/features/pricing/types";
-import {pharmacyReferenceUpdateSchema, pricingUpdateSchema, type PharmacyReferenceUpdateInput, type PricingUpdateInput} from "@/features/pricing/validation";
+import {deliveryOnlyUpdateSchema, pharmacyReferenceUpdateSchema, pricingUpdateSchema, type PharmacyReferenceUpdateInput, type PricingUpdateInput} from "@/features/pricing/validation";
 import {strengthPriceUpdateSchema} from "@/features/pricing/validation";
 import {approvedStrengths} from "@/features/treatments/validation";
 
@@ -131,6 +131,18 @@ export async function updatePricing(adminId: string, input: PricingUpdateInput) 
       const [updated] = await transaction.update(deliveryReferencePrice).set({
         pricePence: input.delivery[method], updatedAt, updatedByAdminId: adminId,
       }).where(eq(deliveryReferencePrice.method, method as ReferenceDeliveryMethod)).returning({method: deliveryReferencePrice.method});
+      if (!updated) throw new PricingConfigurationError();
+    }
+  });
+  return getPricingManagementData();
+}
+
+export async function updateDeliveryPricing(adminId: string, input: unknown) {
+  const delivery = deliveryOnlyUpdateSchema.parse(input);
+  await getDb().transaction(async (tx) => {
+    for (const method of referenceDeliveryMethods) {
+      const [updated] = await tx.update(deliveryReferencePrice).set({pricePence: delivery[method], updatedAt: new Date(), updatedByAdminId: adminId})
+        .where(eq(deliveryReferencePrice.method, method)).returning({method: deliveryReferencePrice.method});
       if (!updated) throw new PricingConfigurationError();
     }
   });

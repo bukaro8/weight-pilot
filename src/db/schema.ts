@@ -35,6 +35,8 @@ export const treatmentRequestStatus = pgEnum("treatment_request_status", ["SUBMI
 export const followUpCategory = pgEnum("follow_up_category", ["INCOMPLETE_ASSESSMENT", "TREATMENT_FOLLOW_UP"]);
 export const followUpSendStatus = pgEnum("follow_up_send_status", ["SENDING", "ACCEPTED", "DELIVERED", "FAILED", "UNCERTAIN"]);
 export const treatmentPaymentSendStatus = pgEnum("treatment_payment_send_status", ["SENDING", "ACCEPTED", "FAILED", "UNCERTAIN"]);
+export const treatmentCommunicationType = pgEnum("treatment_communication_type", ["DECISION_NOTICE", "ADMIN_UPDATE", "PAYMENT_INSTRUCTIONS"]);
+export const treatmentCommunicationDeliveryStatus = pgEnum("treatment_communication_delivery_status", ["PENDING", "DELIVERED", "FAILED"]);
 
 export const user = pgTable(
   "user",
@@ -423,6 +425,49 @@ export const treatmentPaymentInstruction = pgTable("treatment_payment_instructio
   check("treatment_payment_instruction_delivery_check", sql`${table.deliveryPricePence} between 0 and 1000000`),
   check("treatment_payment_instruction_total_check", sql`${table.totalPence} = ${table.itemPricePence} + ${table.deliveryPricePence}`),
 ]);
+
+// Independent email snapshots. Delivery fields alone may change after creation.
+export const treatmentRequestCommunication = pgTable("treatment_request_communication", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  requestId: uuid("request_id").notNull().references(() => treatmentAccessRequest.id, {onDelete: "cascade"}),
+  clientMessageId: uuid("client_message_id"),
+  type: treatmentCommunicationType("type").notNull(),
+  language: preferredLanguage("language").notNull(),
+  treatment: referenceTreatment("treatment"),
+  strength: text("strength"),
+  itemPricePence: integer("item_price_pence"),
+  deliveryPricePence: integer("delivery_price_pence"),
+  totalPence: integer("total_pence"),
+  recipient: text("recipient"),
+  subject: text("subject"),
+  html: text("html"),
+  plainText: text("plain_text"),
+  sendStatus: treatmentPaymentSendStatus("send_status").notNull().default("SENDING"),
+  deliveryStatus: treatmentCommunicationDeliveryStatus("delivery_status").notNull().default("PENDING"),
+  providerMessageId: text("provider_message_id"),
+  failureCode: text("failure_code"),
+  attemptedAt: timestamp("attempted_at", {withTimezone: true}).notNull().defaultNow(),
+  acceptedAt: timestamp("accepted_at", {withTimezone: true}),
+  deliveredAt: timestamp("delivered_at", {withTimezone: true}),
+  authorisedSupplyId: uuid("authorised_supply_id").references(() => treatmentSupplyAuthorisation.id, {onDelete: "set null"}),
+  createdByAdminId: uuid("created_by_admin_id").references(() => user.id, {onDelete: "set null"}),
+}, (table) => [
+  uniqueIndex("treatment_communication_request_client_uidx").on(table.requestId, table.clientMessageId),
+  uniqueIndex("treatment_communication_provider_uidx").on(table.providerMessageId),
+  index("treatment_communication_request_date_idx").on(table.requestId, table.attemptedAt),
+  check("treatment_communication_total_check", sql`${table.totalPence} is null or (${table.itemPricePence} is not null and ${table.deliveryPricePence} is not null and ${table.totalPence} = ${table.itemPricePence} + ${table.deliveryPricePence})`),
+]);
+
+export const treatmentSupplyAuthorisation = pgTable("treatment_supply_authorisation", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  requestId: uuid("request_id").notNull().references(() => treatmentAccessRequest.id, {onDelete: "cascade"}),
+  treatment: referenceTreatment("treatment").notNull(),
+  strength: text("strength").notNull(),
+  prescriptionReference: text("prescription_reference").notNull(),
+  supplyAuthorisationReference: text("supply_authorisation_reference").notNull(),
+  verifiedByAdminId: uuid("verified_by_admin_id").references(() => user.id, {onDelete: "set null"}),
+  verifiedAt: timestamp("verified_at", {withTimezone: true}).notNull().defaultNow(),
+}, (table) => [index("treatment_supply_authorisation_request_idx").on(table.requestId, table.verifiedAt)]);
 
 export const pharmacyReferencePrice = pgTable("pharmacy_reference_price", {
   id: uuid("id").defaultRandom().primaryKey(),

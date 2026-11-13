@@ -22,6 +22,7 @@ export const pricingUpdateSchema = z.object({
 }).strict();
 
 export type PricingUpdateInput = z.infer<typeof pricingUpdateSchema>;
+export const deliveryOnlyUpdateSchema = pricingUpdateSchema.shape.delivery;
 
 export const strengthPriceUpdateSchema = z.object({
   prices: z.array(z.object({

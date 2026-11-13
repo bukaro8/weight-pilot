@@ -3,11 +3,10 @@ import "server-only";
 import {and, desc, eq, isNotNull, isNull, or} from "drizzle-orm";
 import {z} from "zod";
 import {getDb} from "@/db";
-import {consultationReport, messageConversation, questionnaire, questionnaireReviewRequest, treatmentAccessRequest, treatmentPaymentInstruction, treatmentRequestStatusEvent, treatmentStrengthPrice, user} from "@/db/schema";
+import {consultationReport, messageConversation, questionnaire, questionnaireReviewRequest, treatmentAccessRequest, treatmentRequestStatusEvent, user} from "@/db/schema";
 import {listMemberAvailableReports} from "@/features/reports/member";
 import {canBrowseTreatments, canChangeRequestStatus} from "./policy";
 import type {CreateTreatmentRequest, UpdateTreatmentRequest} from "./validation";
-import {calculatePaymentSnapshot} from "./payment";
 
 export async function getCatalogueAccess(member: typeof user.$inferSelect) {
   const reports = await listMemberAvailableReports(member.id);
@@ -55,8 +54,7 @@ export async function getAdminRequest(requestId: string) {
   const [conversation] = await getDb().select({id: messageConversation.id}).from(messageConversation).where(eq(messageConversation.memberId, row.request.memberId)).limit(1);
   const events = await getDb().select({status: treatmentRequestStatusEvent.status, createdAt: treatmentRequestStatusEvent.createdAt})
     .from(treatmentRequestStatusEvent).where(eq(treatmentRequestStatusEvent.requestId, requestId)).orderBy(desc(treatmentRequestStatusEvent.createdAt));
-  const [payment] = await getDb().select().from(treatmentPaymentInstruction).where(eq(treatmentPaymentInstruction.requestId, requestId)).limit(1);
-  return {...row, reviewRequestId: report?.reviewRequestId ?? null, conversationId: conversation?.id ?? null, events, payment: payment ?? null};
+  return {...row, reviewRequestId: report?.reviewRequestId ?? null, conversationId: conversation?.id ?? null, events};
 }
 
 export async function getActiveAdministrator() {
@@ -122,26 +120,4 @@ export async function recordApprovalEmailAccepted(adminId: string, requestId: st
       .where(and(eq(treatmentAccessRequest.id, requestId), eq(treatmentAccessRequest.status, "APPROVED_FOR_NEXT_STEPS"), isNull(treatmentAccessRequest.approvalEmailAcceptedAt))).returning({id: treatmentAccessRequest.id});
     return Boolean(updated);
   });
-}
-
-export async function claimTreatmentPaymentInstruction(adminId: string, requestId: string, input: {prescriptionReference: string; supplyAuthorisationReference: string}) {
-  return getDb().transaction(async (tx) => {
-    const [admin] = await tx.select({role: user.role, status: user.status, emailVerified: user.emailVerified}).from(user).where(eq(user.id, adminId)).limit(1);
-    if (!admin || admin.role !== "ADMIN" || admin.status !== "ACTIVE" || !admin.emailVerified) throw new Error("REQUEST_FORBIDDEN");
-    const [request] = await tx.select().from(treatmentAccessRequest).where(eq(treatmentAccessRequest.id, requestId)).limit(1).for("update");
-    if (!request || request.status !== "APPROVED_FOR_NEXT_STEPS" || !request.approvedTreatment || !request.approvedStrength) throw new Error("REQUEST_NOT_APPROVED");
-    const [member] = await tx.select({email: user.email, emailVerified: user.emailVerified, status: user.status, name: user.name}).from(user).where(eq(user.id, request.memberId)).limit(1);
-    if (!member?.emailVerified || member.status !== "ACTIVE") throw new Error("MEMBER_NOT_VERIFIED");
-    const [existing] = await tx.select().from(treatmentPaymentInstruction).where(eq(treatmentPaymentInstruction.requestId, requestId)).limit(1).for("update");
-    if (existing) throw new Error(existing.sendStatus === "ACCEPTED" ? "PAYMENT_ALREADY_SENT" : "PAYMENT_ATTEMPT_EXISTS");
-    const [price] = await tx.select({pricePence: treatmentStrengthPrice.pricePence}).from(treatmentStrengthPrice).where(and(eq(treatmentStrengthPrice.treatment, request.approvedTreatment), eq(treatmentStrengthPrice.strength, request.approvedStrength))).limit(1);
-    const snapshot = calculatePaymentSnapshot({treatment: request.approvedTreatment, strength: request.approvedStrength, pricePence: price?.pricePence ?? null});
-    await tx.insert(treatmentPaymentInstruction).values({requestId, ...snapshot, prescriptionReference: input.prescriptionReference, supplyAuthorisationReference: input.supplyAuthorisationReference, verifiedByAdminId: adminId});
-    return {snapshot, recipient: member.email, memberName: member.name, language: request.language};
-  });
-}
-
-export async function recordTreatmentPaymentResult(requestId: string, result: {status: "ACCEPTED" | "FAILED" | "UNCERTAIN"; providerMessageId?: string; failureCode?: string}) {
-  await getDb().update(treatmentPaymentInstruction).set({sendStatus: result.status, providerMessageId: result.providerMessageId ?? null, failureCode: result.failureCode ?? null, sentAt: result.status === "ACCEPTED" ? new Date() : null})
-    .where(and(eq(treatmentPaymentInstruction.requestId, requestId), eq(treatmentPaymentInstruction.sendStatus, "SENDING")));
 }
