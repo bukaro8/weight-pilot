@@ -111,19 +111,19 @@ async function sendMessage(actor: MessageActor, requestedConversationId: string 
   return inserted;
 }
 
-async function notifyRecipient(messageId: string, recipient: string, language: "en" | "es", localePath: string) {
+async function notifyRecipient(messageId: string, recipient: string, recipientName: string | null, language: "en" | "es", localePath: string) {
   const origin = publicInvitationOrigin(process.env.PUBLIC_APP_URL || process.env.BETTER_AUTH_URL);
   if (!origin) return;
   const url = new URL(localePath, origin).toString();
-  await sendPrivateMessageNotification({messageId, recipient, language, url});
+  await sendPrivateMessageNotification({messageId, recipient, recipientName, language, url});
 }
 
 export async function sendMemberMessage(actor: MessageActor, input: PrivateMessageInput) {
   const result = await sendMessage(actor, null, input);
   if (result.created) {
-    const [admin] = await getDb().select({id: user.id, email: user.email, language: user.preferredLanguage})
+    const [admin] = await getDb().select({id: user.id, email: user.email, name: user.name, language: user.preferredLanguage})
       .from(user).where(and(eq(user.role, "ADMIN"), eq(user.status, "ACTIVE"), eq(user.emailVerified, true))).limit(1);
-    if (admin) await notifyRecipient(result.record.id, admin.email, admin.language, `/${admin.language}/admin/messages/${result.conversationId}`);
+    if (admin) await notifyRecipient(result.record.id, admin.email, admin.name, admin.language, `/${admin.language}/admin/messages/${result.conversationId}`);
   }
   return {conversationId: result.conversationId, message: mapMessage(result.record, actor.id), created: result.created};
 }
@@ -131,9 +131,9 @@ export async function sendMemberMessage(actor: MessageActor, input: PrivateMessa
 export async function sendAdminMessage(actor: MessageActor, conversationId: string, input: PrivateMessageInput) {
   const result = await sendMessage(actor, conversationId, input);
   if (result.created) {
-    const [member] = await getDb().select({email: user.email, language: user.preferredLanguage, status: user.status, emailVerified: user.emailVerified})
+    const [member] = await getDb().select({email: user.email, name: user.name, language: user.preferredLanguage, status: user.status, emailVerified: user.emailVerified})
       .from(user).where(eq(user.id, result.memberId)).limit(1);
-    if (member?.status === "ACTIVE" && member.emailVerified) await notifyRecipient(result.record.id, member.email, member.language, `/${member.language}/messages`);
+    if (member?.status === "ACTIVE" && member.emailVerified) await notifyRecipient(result.record.id, member.email, member.name, member.language, `/${member.language}/messages`);
   }
   return {conversationId, message: mapMessage(result.record, actor.id), created: result.created};
 }
