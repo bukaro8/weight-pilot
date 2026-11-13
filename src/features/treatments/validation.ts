@@ -50,3 +50,10 @@ export const treatmentDecisionSchema = updateTreatmentRequestSchema.superRefine(
 
 export type CreateTreatmentRequest = z.infer<typeof createTreatmentRequestSchema>;
 export type UpdateTreatmentRequest = z.infer<typeof updateTreatmentRequestSchema>;
+
+export const paymentAuthorisationSchema = z.object({
+  prescriptionReference: z.string().trim().min(3).max(160),
+  supplyAuthorisationReference: z.string().trim().min(3).max(160),
+  prescribingVerified: z.literal(true),
+  supplyVerified: z.literal(true),
+}).strict();

@@ -34,6 +34,7 @@ export const referenceDeliveryMethod = pgEnum("reference_delivery_method", ["STA
 export const treatmentRequestStatus = pgEnum("treatment_request_status", ["SUBMITTED", "UNDER_REVIEW", "APPROVED_FOR_NEXT_STEPS", "DECLINED", "CANCELLED"]);
 export const followUpCategory = pgEnum("follow_up_category", ["INCOMPLETE_ASSESSMENT", "TREATMENT_FOLLOW_UP"]);
 export const followUpSendStatus = pgEnum("follow_up_send_status", ["SENDING", "ACCEPTED", "DELIVERED", "FAILED", "UNCERTAIN"]);
+export const treatmentPaymentSendStatus = pgEnum("treatment_payment_send_status", ["SENDING", "ACCEPTED", "FAILED", "UNCERTAIN"]);
 
 export const user = pgTable(
   "user",
@@ -320,6 +321,18 @@ export const treatmentReferencePrice = pgTable(
   ],
 );
 
+// Exact strength prices are separate from illustrative monthly tiers.
+export const treatmentStrengthPrice = pgTable("treatment_strength_price", {
+  treatment: referenceTreatment("treatment").notNull(),
+  strength: text("strength").notNull(),
+  pricePence: integer("price_pence").notNull(),
+  updatedAt: timestamp("updated_at", {withTimezone: true}).notNull().defaultNow(),
+  updatedByAdminId: uuid("updated_by_admin_id").references(() => user.id, {onDelete: "set null"}),
+}, (table) => [
+  primaryKey({columns: [table.treatment, table.strength]}),
+  check("treatment_strength_price_pence_check", sql`${table.pricePence} between 1 and 1000000`),
+]);
+
 export const treatmentAccessRequest = pgTable("treatment_access_request", {
   id: uuid("id").defaultRandom().primaryKey(),
   memberId: uuid("member_id").notNull().references(() => user.id, {onDelete: "cascade"}),
@@ -387,6 +400,29 @@ export const pharmacyReferenceSource = pgTable("pharmacy_reference_source", {
   updatedAt: timestamp("updated_at", {withTimezone: true}).notNull().defaultNow(),
   updatedByAdminId: uuid("updated_by_admin_id").references(() => user.id, {onDelete: "set null"}),
 });
+
+// Frozen at first payment-email attempt. A changed price cannot alter history.
+export const treatmentPaymentInstruction = pgTable("treatment_payment_instruction", {
+  requestId: uuid("request_id").primaryKey().references(() => treatmentAccessRequest.id, {onDelete: "cascade"}),
+  treatment: referenceTreatment("treatment").notNull(),
+  strength: text("strength").notNull(),
+  itemPricePence: integer("item_price_pence").notNull(),
+  deliveryPricePence: integer("delivery_price_pence").notNull(),
+  totalPence: integer("total_pence").notNull(),
+  prescriptionReference: text("prescription_reference").notNull(),
+  supplyAuthorisationReference: text("supply_authorisation_reference").notNull(),
+  verifiedByAdminId: uuid("verified_by_admin_id").references(() => user.id, {onDelete: "set null"}),
+  verifiedAt: timestamp("verified_at", {withTimezone: true}).notNull().defaultNow(),
+  sendStatus: treatmentPaymentSendStatus("send_status").notNull().default("SENDING"),
+  providerMessageId: text("provider_message_id"),
+  sentAt: timestamp("sent_at", {withTimezone: true}),
+  attemptedAt: timestamp("attempted_at", {withTimezone: true}).notNull().defaultNow(),
+  failureCode: text("failure_code"),
+}, (table) => [
+  check("treatment_payment_instruction_item_check", sql`${table.itemPricePence} between 1 and 1000000`),
+  check("treatment_payment_instruction_delivery_check", sql`${table.deliveryPricePence} between 0 and 1000000`),
+  check("treatment_payment_instruction_total_check", sql`${table.totalPence} = ${table.itemPricePence} + ${table.deliveryPricePence}`),
+]);
 
 export const pharmacyReferencePrice = pgTable("pharmacy_reference_price", {
   id: uuid("id").defaultRandom().primaryKey(),

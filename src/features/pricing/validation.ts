@@ -23,6 +23,14 @@ export const pricingUpdateSchema = z.object({
 
 export type PricingUpdateInput = z.infer<typeof pricingUpdateSchema>;
 
+export const strengthPriceUpdateSchema = z.object({
+  prices: z.array(z.object({
+    treatment: z.enum(["SEMAGLUTIDE", "TIRZEPATIDE"]),
+    strength: z.string().min(1).max(20),
+    pricePence: z.number().int().min(1).max(1_000_000).nullable(),
+  }).strict()).length(11),
+}).strict();
+
 export const pharmacyReferenceUpdateSchema = z.object({
   source: z.object({
     id: z.uuid(),

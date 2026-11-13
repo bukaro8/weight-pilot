@@ -12,59 +12,46 @@ export function renderTreatmentRequestNotification(input: {language: "en" | "es"
 }
 
 const decisionCopy = {
-  en: {
-    subject: "Your WeightPilot request: next steps",
-    title: "Your request has been approved for next steps",
-    greeting: (name: string) => `Hello ${name},`,
-    intro: "The administrator has reviewed your request. The details below are for the next administrative steps only.",
-    selected: "Product and strength selected for next steps",
-    payment: "Bank transfer details",
-    account: "Account name", sort: "Sort code", number: "Account number",
-    cash: "You may also choose to pay in cash. Please contact us through your private WeightPilot messages to arrange next steps.",
-    button: "Open private messages",
-    disclaimer: "This message is not a prescription or a determination of medical suitability. Any medicine requires independent assessment, prescribing and supply by an appropriately authorised professional.",
-    footer: "WeightPilot · Private weight-management information and guidance",
-  },
-  es: {
-    subject: "Tu solicitud de WeightPilot: próximos pasos",
-    title: "Tu solicitud se ha aprobado para los próximos pasos",
-    greeting: (name: string) => `Hola ${name},`,
-    intro: "La administración ha revisado tu solicitud. Los datos siguientes son únicamente para los próximos pasos administrativos.",
-    selected: "Producto y concentración seleccionados para los próximos pasos",
-    payment: "Datos para transferencia bancaria",
-    account: "Titular de la cuenta", sort: "Código de clasificación", number: "Número de cuenta",
-    cash: "También puedes elegir pagar en efectivo. Escríbenos mediante tus mensajes privados de WeightPilot para organizar los próximos pasos.",
-    button: "Abrir mensajes privados",
-    disclaimer: "Este mensaje no es una receta ni determina la idoneidad médica. Cualquier medicamento requiere una evaluación, prescripción y suministro independientes por parte de un profesional debidamente autorizado.",
-    footer: "WeightPilot · Información y orientación privadas para el control de peso",
-  },
+  en: {subject: "Your WeightPilot request: next steps", title: "Your request has been approved for next steps", greeting: (name: string) => `Hello ${name},`, intro: "The administrator has reviewed your request. We will contact you separately if prescribing and lawful supply are authorised. No payment is due from this notice.", selected: "Product and strength selected for next steps", button: "Open private messages", disclaimer: "This administrative decision is not a prescription or a determination of medical suitability.", footer: "WeightPilot · Private weight-management information and guidance"},
+  es: {subject: "Tu solicitud de WeightPilot: próximos pasos", title: "Tu solicitud se ha aprobado para los próximos pasos", greeting: (name: string) => `Hola ${name},`, intro: "La administración ha revisado tu solicitud. Nos pondremos en contacto contigo por separado si se autorizan la prescripción y el suministro legal. Este aviso no requiere ningún pago.", selected: "Producto y concentración seleccionados para los próximos pasos", button: "Abrir mensajes privados", disclaimer: "Esta decisión administrativa no es una receta ni determina la idoneidad médica.", footer: "WeightPilot · Información y orientación privadas para el control de peso"},
 } as const;
 
 function escape(value: string) {
   return value.replace(/[&<>\"']/g, (character) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"})[character] ?? character);
 }
 
-export function renderTreatmentApprovalEmail(input: {
-  language: "en" | "es";
-  memberName: string;
-  treatment: "SEMAGLUTIDE" | "TIRZEPATIDE";
-  strength: string;
-  messagesUrl: string;
-  accountName?: string;
-  sortCode?: string;
-  accountNumber?: string;
-}) {
+function treatmentLabel(language: "en" | "es", treatment: "SEMAGLUTIDE" | "TIRZEPATIDE") {
+  return treatment === "SEMAGLUTIDE" ? (language === "es" ? "Semaglutida" : "Semaglutide") : (language === "es" ? "Tirzepatida" : "Tirzepatide");
+}
+
+function emailShell(language: "en" | "es", body: string, messagesUrl: string, footer: string) {
+  const notice = renderNoReplyNotice(language, messagesUrl);
+  return `<!doctype html><html lang="${language}"><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#FBF8F5;color:#1A2433;font-family:Arial,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#FBF8F5"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#FFFFFF;border:1px solid #E6DFD9;border-radius:20px;overflow:hidden"><tr><td style="padding:30px 24px"><p style="margin:0 0 26px;color:#1E3A5F;font-family:Georgia,serif;font-size:26px;font-weight:bold">WeightPilot</p>${body}<a href="${escape(messagesUrl)}" style="display:inline-block;margin-top:16px;padding:14px 20px;border-radius:999px;background:#1E3A5F;color:#fff;font-weight:bold;text-decoration:none">${language === "es" ? "Abrir mensajes privados" : "Open private messages"}</a></td></tr><tr><td style="padding:20px 24px;background:#1E3A5F;color:#fff;font-size:12px">${escape(footer)}<div style="margin-top:12px;padding:12px;border-radius:8px;background:#F6ECE8">${notice.html}</div></td></tr></table></td></tr></table></body></html>`;
+}
+
+export function renderTreatmentApprovalEmail(input: {language: "en" | "es"; memberName: string; treatment: "SEMAGLUTIDE" | "TIRZEPATIDE"; strength: string; messagesUrl: string}) {
   const copy = decisionCopy[input.language];
-  const treatment = input.language === "es"
-    ? (input.treatment === "SEMAGLUTIDE" ? "Semaglutida" : "Tirzepatida")
-    : (input.treatment === "SEMAGLUTIDE" ? "Semaglutide" : "Tirzepatide");
-  const accountName = input.accountName?.trim() || "XXXX";
-  const sortCode = input.sortCode?.trim() || "00 00 00";
-  const accountNumber = input.accountNumber?.trim() || "0000000";
-  const safeUrl = escape(input.messagesUrl);
+  const treatment = treatmentLabel(input.language, input.treatment);
+  const body = `<p>${escape(copy.greeting(input.memberName))}</p><h1 style="color:#142A47;font-family:Georgia,serif;font-size:28px;line-height:1.2">${escape(copy.title)}</h1><p style="color:#5B6779;line-height:1.6">${escape(copy.intro)}</p><div style="margin:22px 0;padding:18px;background:#EDF1F6;border-radius:14px"><p style="margin:0;color:#5B6779;font-size:13px">${escape(copy.selected)}</p><p style="margin:8px 0 0;color:#142A47;font-size:18px;font-weight:bold">${escape(treatment)} · ${escape(input.strength)}</p></div><p style="font-size:13px;line-height:1.6;color:#5B6779">${escape(copy.disclaimer)}</p>`;
   const notice = renderNoReplyNotice(input.language, input.messagesUrl);
-  const subject = copy.subject;
-  const html = `<!doctype html><html lang="${input.language}"><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;background:#FBF8F5;color:#1A2433;font-family:Arial,sans-serif"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#FBF8F5"><tr><td align="center" style="padding:24px 12px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#FFFFFF;border:1px solid #E6DFD9;border-radius:20px;overflow:hidden"><tr><td style="padding:30px 24px"><p style="margin:0 0 26px;color:#1E3A5F;font-family:Georgia,serif;font-size:26px;font-weight:bold">WeightPilot</p><p>${escape(copy.greeting(input.memberName))}</p><h1 style="color:#142A47;font-family:Georgia,serif;font-size:28px;line-height:1.2">${escape(copy.title)}</h1><p style="color:#5B6779;line-height:1.6">${escape(copy.intro)}</p><section style="margin:22px 0;padding:18px;background:#EDF1F6;border-radius:14px"><p style="margin:0;color:#5B6779;font-size:13px">${escape(copy.selected)}</p><p style="margin:8px 0 0;color:#142A47;font-size:18px;font-weight:bold">${escape(treatment)} · ${escape(input.strength)}</p></section><section style="margin:22px 0;padding:18px;background:#F6ECE8;border:1px solid #E9C9C0;border-radius:14px"><h2 style="margin:0 0 12px;color:#142A47;font-family:Georgia,serif;font-size:20px">${escape(copy.payment)}</h2><p style="margin:5px 0"><strong>${escape(copy.account)}:</strong> ${escape(accountName)}</p><p style="margin:5px 0"><strong>${escape(copy.sort)}:</strong> ${escape(sortCode)}</p><p style="margin:5px 0"><strong>${escape(copy.number)}:</strong> ${escape(accountNumber)}</p><p style="margin:14px 0 0;color:#5B6779;line-height:1.55">${escape(copy.cash)}</p></section><p style="font-size:13px;line-height:1.6;color:#5B6779">${escape(copy.disclaimer)}</p><a href="${safeUrl}" style="display:inline-block;margin-top:12px;padding:14px 20px;border-radius:999px;background:#1E3A5F;color:#fff;font-weight:bold;text-decoration:none">${escape(copy.button)}</a></td></tr><tr><td style="padding:20px 24px;background:#1E3A5F;color:#fff;font-size:12px">${escape(copy.footer)}<div style="margin-top:12px;padding-top:12px;border-top:1px solid #FFFFFF55;background:#F6ECE8;padding:12px;border-radius:8px">${notice.html}</div></td></tr></table></td></tr></table></body></html>`;
-  const text = `${copy.greeting(input.memberName)}\n\n${copy.title}\n${copy.intro}\n\n${copy.selected}: ${treatment} · ${input.strength}\n\n${copy.payment}\n${copy.account}: ${accountName}\n${copy.sort}: ${sortCode}\n${copy.number}: ${accountNumber}\n\n${copy.cash}\n\n${copy.disclaimer}\n\n${copy.button}: ${input.messagesUrl}\n\n${copy.footer}\n\n${notice.text}`;
-  return {subject, html, text};
+  return {subject: copy.subject, html: emailShell(input.language, body, input.messagesUrl, copy.footer), text: `${copy.greeting(input.memberName)}\n\n${copy.title}\n${copy.intro}\n\n${copy.selected}: ${treatment} · ${input.strength}\n\n${copy.disclaimer}\n\n${copy.button}: ${input.messagesUrl}\n\n${notice.text}`};
+}
+
+export function renderTreatmentPaymentEmail(input: {language: "en" | "es"; memberName: string; treatment: "SEMAGLUTIDE" | "TIRZEPATIDE"; strength: string; itemPricePence: number; deliveryPricePence: number; totalPence: number; accountName: string; sortCode: string; accountNumber: string; messagesUrl: string; imageUrl: string}) {
+  const es = input.language === "es";
+  const money = (pence: number) => new Intl.NumberFormat(es ? "es-ES" : "en-GB", {style: "currency", currency: "GBP"}).format(pence / 100);
+  const treatment = treatmentLabel(input.language, input.treatment);
+  const subject = es ? "WeightPilot: detalles de pago para los próximos pasos" : "WeightPilot: payment details for next steps";
+  const title = es ? "Detalles para los próximos pasos" : "Details for the next steps";
+  const greeting = es ? `Hola ${input.memberName},` : `Hello ${input.memberName},`;
+  const intro = es ? "Tras la verificación de la prescripción y la autorización legal del suministro, te enviamos los detalles de pago del producto y la concentración aprobados." : "Following verification of the prescription and lawful supply authorisation, here are the payment details for the approved product and strength.";
+  const rows: [string, string][] = [[es ? "Medicamento" : "Medication", money(input.itemPricePence)], [es ? "Envío Royal Mail Tracked 24" : "Royal Mail Tracked 24 delivery", money(input.deliveryPricePence)]];
+  const detail = rows.map(([label, amount]) => `<tr><td style="padding:7px 0;color:#5B6779">${escape(label)}</td><td align="right" style="padding:7px 0;color:#142A47;font-weight:bold">${escape(amount)}</td></tr>`).join("");
+  const delivery = es ? "Royal Mail Tracked 24 tiene como objetivo entregar el siguiente día laborable después del despacho; no es una garantía. Confirmaremos el despacho por separado." : "Royal Mail Tracked 24 aims to deliver the next working day after dispatch; it is not guaranteed. Dispatch will be confirmed separately.";
+  const alternative = es ? "Si prefieres pagar en efectivo o preguntar por criptomonedas, escríbenos por los mensajes privados de WeightPilot. No envíes pagos por criptomonedas sin recibir instrucciones verificadas." : "If you prefer cash or want to ask about cryptocurrency, contact us through your private WeightPilot messages. Do not send cryptocurrency without verified instructions.";
+  const disclaimer = es ? "Esta comunicación no sustituye la evaluación, prescripción ni suministro por profesionales autorizados. Si tienes dudas, utiliza tus mensajes privados de WeightPilot." : "This message does not replace assessment, prescribing or supply by authorised professionals. If you have questions, use your private WeightPilot messages.";
+  const body = `<p>${escape(greeting)}</p><h1 style="color:#142A47;font-family:Georgia,serif;font-size:28px;line-height:1.2">${escape(title)}</h1><p style="color:#5B6779;line-height:1.6">${escape(intro)}</p><div style="margin:22px 0;padding:18px;background:#EDF1F6;border-radius:14px;text-align:center"><img src="${escape(input.imageUrl)}" alt="${escape(treatment)}" width="220" style="display:block;width:100%;max-width:220px;height:auto;margin:0 auto 12px;object-fit:contain"><p style="margin:0;color:#142A47;font-size:19px;font-weight:bold">${escape(treatment)} · ${escape(input.strength)}</p></div><div style="margin:22px 0;padding:18px;background:#F6ECE8;border:1px solid #E9C9C0;border-radius:14px"><h2 style="margin:0 0 12px;color:#142A47;font-family:Georgia,serif;font-size:21px">${es ? "Detalles de pago" : "Payment details"}</h2><table role="presentation" width="100%" cellspacing="0" cellpadding="0">${detail}<tr><td style="padding:12px 0;border-top:1px solid #D4A094;font-weight:bold;color:#142A47">${es ? "Total a pagar" : "Total payable"}</td><td align="right" style="padding:12px 0;border-top:1px solid #D4A094;font-size:21px;font-weight:bold;color:#142A47">${escape(money(input.totalPence))}</td></tr></table><p style="margin:10px 0 4px;font-weight:bold;color:#142A47">${es ? "Transferencia bancaria" : "Bank transfer"}</p><p style="margin:5px 0"><strong>${es ? "Titular" : "Account name"}:</strong> ${escape(input.accountName)}</p><p style="margin:5px 0"><strong>${es ? "Código de clasificación" : "Sort code"}:</strong> ${escape(input.sortCode)}</p><p style="margin:5px 0"><strong>${es ? "Número de cuenta" : "Account number"}:</strong> ${escape(input.accountNumber)}</p></div><h2 style="color:#142A47;font-family:Georgia,serif;font-size:19px">${es ? "Entrega" : "Delivery"}</h2><p style="color:#5B6779;line-height:1.6">${escape(delivery)}</p><p style="color:#5B6779;line-height:1.6">${escape(alternative)}</p><p style="font-size:13px;line-height:1.6;color:#5B6779">${escape(disclaimer)}</p>`;
+  const notice = renderNoReplyNotice(input.language, input.messagesUrl);
+  const text = `${greeting}\n\n${title}\n${intro}\n\n${treatment} · ${input.strength}\n${rows.map(([label, amount]) => `${label}: ${amount}`).join("\n")}\n${es ? "Total a pagar" : "Total payable"}: ${money(input.totalPence)}\n\n${es ? "Titular" : "Account name"}: ${input.accountName}\n${es ? "Código de clasificación" : "Sort code"}: ${input.sortCode}\n${es ? "Número de cuenta" : "Account number"}: ${input.accountNumber}\n\n${delivery}\n\n${alternative}\n\n${disclaimer}\n\n${input.messagesUrl}\n\n${notice.text}`;
+  return {subject, html: emailShell(input.language, body, input.messagesUrl, decisionCopy[input.language].footer), text};
 }

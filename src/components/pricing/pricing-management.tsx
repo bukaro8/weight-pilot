@@ -41,7 +41,9 @@ function poundsToPence(value: string) {
   return Math.round(Number(value) * 100);
 }
 
-export function PricingManagement({initialPricing, initialScenarios, initialPharmacyReferences}: {initialPricing: PricingBook; initialScenarios: PricingScenarios; initialPharmacyReferences: PharmacyReferenceData}) {
+type StrengthPriceRow = {treatment: ReferenceTreatment; strength: string; pricePence: number | null; updatedAt: string | null};
+
+export function PricingManagement({initialPricing, initialScenarios, initialPharmacyReferences, initialStrengthPrices}: {initialPricing: PricingBook; initialScenarios: PricingScenarios; initialPharmacyReferences: PharmacyReferenceData; initialStrengthPrices: StrengthPriceRow[]}) {
   const t = useTranslations("adminPricing");
   const adminNav = useTranslations("adminNav");
   const locale = useLocale();
@@ -109,10 +111,34 @@ export function PricingManagement({initialPricing, initialScenarios, initialPhar
       <div className="sticky bottom-3 z-20 rounded-2xl border border-primary/10 bg-background/95 p-3 shadow-[0_14px_40px_rgba(20,42,71,0.14)] backdrop-blur sm:flex sm:items-center sm:justify-between sm:gap-5 sm:p-4"><div className="min-h-6" aria-live="polite">{message && <p className={`text-sm font-semibold ${message === "success" ? "text-primary" : "text-red-800"}`}>{message === "success" && <Check className="mr-1.5 inline" aria-hidden="true" size={17}/>} {t(`states.${message}`)}</p>}</div><button type="submit" disabled={saving} className="mt-2 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-primary px-6 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(30,58,95,0.18)] transition-[background-color,box-shadow] hover:bg-primary-hover hover:shadow-[0_10px_28px_rgba(30,58,95,0.24)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60 sm:mt-0 sm:w-auto">{saving ? <LoaderCircle className="mr-2 animate-spin motion-reduce:animate-none" aria-hidden="true" size={18}/> : <Save className="mr-2" aria-hidden="true" size={18}/>} {saving ? t("saving") : t("save")}</button></div>
     </form>
 
+    <StrengthPriceEditor initialData={initialStrengthPrices}/>
     <PharmacyReferenceEditor initialData={initialPharmacyReferences}/>
 
     <section className="mt-10 border-t border-border pt-9" aria-labelledby="calculator-title"><div className="grid gap-7 lg:grid-cols-[0.9fr_1.1fr] lg:items-start"><div><div className="flex size-11 items-center justify-center rounded-xl bg-pale-blush text-primary"><Calculator aria-hidden="true" size={21}/></div><p className="mt-5 text-xs font-bold uppercase tracking-[0.16em] text-primary-hover">{t("calculatorEyebrow")}</p><h2 id="calculator-title" className="mt-2 font-display text-3xl font-semibold text-primary-dark">{t("calculatorTitle")}</h2><p className="mt-3 text-sm leading-6 text-muted">{t("calculatorBody")}</p><p className="mt-3 rounded-xl border border-accent-strong/25 bg-pale-blush/70 px-4 py-3 text-xs leading-5 text-muted">{t("calculatorDisclaimer")}</p></div><div className="rounded-2xl border border-border bg-surface p-5 sm:p-6"><div className="grid gap-5 sm:grid-cols-2"><ChoiceGroup label={t("durationLabel")}><div className="grid grid-cols-3 gap-2">{referenceDurations.map((item) => <ChoiceButton key={item} active={duration === item} onClick={() => setDuration(item)}>{t("duration", {months: item})}</ChoiceButton>)}</div></ChoiceGroup><ChoiceGroup label={t("deliveryLabel")}><div className="grid gap-2">{referenceDeliveryMethods.map((method) => <ChoiceButton key={method} active={deliveryMethod === method} onClick={() => setDeliveryMethod(method)}>{t(`delivery.${method}`)}</ChoiceButton>)}</div></ChoiceGroup></div><div className="mt-6 grid gap-3">{referenceTreatments.map((treatment) => {const result = scenarios[duration][treatment][deliveryMethod]; return <article key={treatment} className="rounded-xl bg-background p-4"><div className="flex items-baseline justify-between gap-4"><h3 className="font-display text-xl font-semibold text-primary-dark">{t(`treatments.${treatment}`)}</h3><p className="text-lg font-bold text-primary">{currency.format(result.totalCostPence / 100)}</p></div><dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm"><dt className="text-muted">{t("treatmentCost")}</dt><dd className="text-right font-semibold text-primary-dark">{currency.format(result.treatmentCostPence / 100)}</dd><dt className="text-muted">{t("deliveryCost")}</dt><dd className="text-right font-semibold text-primary-dark">{currency.format(result.deliveryCostPence / 100)}</dd></dl></article>;})}</div></div></div></section>
   </div></main>;
+}
+
+function StrengthPriceEditor({initialData}: {initialData: StrengthPriceRow[]}) {
+  const t = useTranslations("adminPricing.strengthPrices");
+  const labels = useTranslations("adminPricing.treatments");
+  const [values, setValues] = useState(() => Object.fromEntries(initialData.map((row) => [`${row.treatment}:${row.strength}`, row.pricePence === null ? "" : (row.pricePence / 100).toFixed(2)])));
+  const [state, setState] = useState<"success" | "error" | "validation">();
+  const [saving, setSaving] = useState(false);
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setState(undefined);
+    const prices = initialData.map((row) => {
+      const value = values[`${row.treatment}:${row.strength}`]?.trim() ?? "";
+      return {treatment: row.treatment, strength: row.strength, pricePence: value ? poundsToPence(value) : null};
+    });
+    if (prices.some((row) => row.pricePence !== null && (!Number.isInteger(row.pricePence) || row.pricePence < 1))) {setState("validation"); return;}
+    setSaving(true);
+    try {
+      const response = await fetch("/api/admin/pricing/strengths", {method: "PUT", headers: {"content-type": "application/json"}, body: JSON.stringify({prices})});
+      if (!response.ok) throw new Error();
+      setState("success");
+    } catch {setState("error");} finally {setSaving(false);}
+  }
+  return <section className="mt-10 rounded-[1.5rem] border border-border bg-surface p-5 sm:p-7" aria-labelledby="strength-prices-title"><h2 id="strength-prices-title" className="font-display text-3xl text-primary-dark">{t("title")}</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-muted">{t("description")}</p><form onSubmit={(event) => void save(event)} className="mt-5" noValidate><div className="grid gap-4 lg:grid-cols-2">{referenceTreatments.map((treatment) => <fieldset key={treatment} className="rounded-2xl border border-border p-4"><legend className="px-1 font-semibold text-primary-dark">{labels(treatment)}</legend>{initialData.filter((row) => row.treatment === treatment).map((row) => <PriceRow key={row.strength} id={`strength-${treatment}-${row.strength}`} label={row.strength} value={values[`${row.treatment}:${row.strength}`] ?? ""} required={false} onChange={(value) => setValues((current) => ({...current, [`${row.treatment}:${row.strength}`]: value}))}/>)}</fieldset>)}</div><div className="mt-5 flex flex-wrap items-center justify-between gap-3"><p aria-live="polite" className={`text-sm ${state === "error" || state === "validation" ? "text-red-800" : "text-primary"}`}>{state && t(state)}</p><button type="submit" disabled={saving} className="min-h-12 rounded-full bg-primary px-6 font-semibold text-white hover:bg-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60">{saving ? t("saving") : t("save")}</button></div></form></section>;
 }
 
 function PharmacyReferenceEditor({initialData}: {initialData: PharmacyReferenceData}) {
@@ -148,8 +174,8 @@ function PharmacyReferenceEditor({initialData}: {initialData: PharmacyReferenceD
   </section>;
 }
 
-function PriceRow({id, label, value, onChange}: {id: string; label: string; value: string; onChange: (value: string) => void}) {
-  return <label htmlFor={id} className="flex min-h-16 items-center justify-between gap-4 py-2.5"><span className="text-sm font-semibold text-primary-dark">{label}</span><span className="relative w-32 max-w-[48%]"><span className="pointer-events-none absolute inset-y-0 left-3 flex items-center font-semibold text-muted">£</span><input id={id} type="number" inputMode="decimal" min="0.01" max="10000" step="0.01" required value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-xl border border-border bg-background pl-8 pr-3 text-right font-semibold text-primary-dark outline-none transition-[border-color,box-shadow] focus:border-primary/45 focus:ring-2 focus:ring-primary/15"/></span></label>;
+function PriceRow({id, label, value, onChange, required = true}: {id: string; label: string; value: string; onChange: (value: string) => void; required?: boolean}) {
+  return <label htmlFor={id} className="flex min-h-16 items-center justify-between gap-4 py-2.5"><span className="text-sm font-semibold text-primary-dark">{label}</span><span className="relative w-32 max-w-[48%]"><span className="pointer-events-none absolute inset-y-0 left-3 flex items-center font-semibold text-muted">£</span><input id={id} type="number" inputMode="decimal" min="0.01" max="10000" step="0.01" required={required} value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-xl border border-border bg-background pl-8 pr-3 text-right font-semibold text-primary-dark outline-none transition-[border-color,box-shadow] focus:border-primary/45 focus:ring-2 focus:ring-primary/15"/></span></label>;
 }
 
 function ChoiceGroup({label, children}: {label: string; children: React.ReactNode}) { return <fieldset><legend className="mb-2 text-sm font-semibold text-primary-dark">{label}</legend>{children}</fieldset>; }

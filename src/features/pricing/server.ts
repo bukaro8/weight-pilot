@@ -2,7 +2,7 @@ import "server-only";
 
 import {and, asc, eq} from "drizzle-orm";
 
-import {deliveryReferencePrice, pharmacyReferencePrice, pharmacyReferenceSource, treatmentReferencePrice} from "@/db/schema";
+import {deliveryReferencePrice, pharmacyReferencePrice, pharmacyReferenceSource, treatmentReferencePrice, treatmentStrengthPrice} from "@/db/schema";
 import {getDb} from "@/db";
 import {buildPricingScenarios} from "@/features/pricing/calculations";
 import {
@@ -15,6 +15,8 @@ import {
   type ReferenceTreatment,
 } from "@/features/pricing/types";
 import {pharmacyReferenceUpdateSchema, pricingUpdateSchema, type PharmacyReferenceUpdateInput, type PricingUpdateInput} from "@/features/pricing/validation";
+import {strengthPriceUpdateSchema} from "@/features/pricing/validation";
+import {approvedStrengths} from "@/features/treatments/validation";
 
 export class PricingConfigurationError extends Error {
   constructor() { super("PRICING_NOT_INITIALISED"); }
@@ -54,7 +56,35 @@ export async function getPricingBook(): Promise<PricingBook> {
 export async function getPricingManagementData() {
   const pricing = await getPricingBook();
   const pharmacyReferences = await getPharmacyReferenceData();
-  return {pricing, scenarios: buildPricingScenarios(pricing), pharmacyReferences};
+  return {pricing, scenarios: buildPricingScenarios(pricing), pharmacyReferences, strengthPrices: await getStrengthPrices()};
+}
+
+export async function getStrengthPrices() {
+  const rows = await getDb().select().from(treatmentStrengthPrice);
+  return referenceTreatments.flatMap((treatment) => approvedStrengths[treatment].map((strength) => {
+    const row = rows.find((item) => item.treatment === treatment && item.strength === strength);
+    return {treatment, strength, pricePence: row?.pricePence ?? null, updatedAt: row?.updatedAt.toISOString() ?? null};
+  }));
+}
+
+export async function updateStrengthPrices(adminId: string, input: unknown) {
+  const parsed = strengthPriceUpdateSchema.parse(input);
+  const expected = referenceTreatments.flatMap((treatment) => approvedStrengths[treatment].map((strength) => `${treatment}:${strength}`));
+  const supplied = parsed.prices.map((price) => `${price.treatment}:${price.strength}`);
+  if (new Set(supplied).size !== expected.length || expected.some((key) => !supplied.includes(key))) throw new PricingConfigurationError();
+  await getDb().transaction(async (tx) => {
+    for (const price of parsed.prices) {
+      if (price.pricePence === null) {
+        await tx.delete(treatmentStrengthPrice).where(and(eq(treatmentStrengthPrice.treatment, price.treatment), eq(treatmentStrengthPrice.strength, price.strength)));
+      } else {
+        await tx.insert(treatmentStrengthPrice).values({...price, pricePence: price.pricePence, updatedByAdminId: adminId}).onConflictDoUpdate({
+          target: [treatmentStrengthPrice.treatment, treatmentStrengthPrice.strength],
+          set: {pricePence: price.pricePence, updatedAt: new Date(), updatedByAdminId: adminId},
+        });
+      }
+    }
+  });
+  return getStrengthPrices();
 }
 
 export async function getPharmacyReferenceData() {

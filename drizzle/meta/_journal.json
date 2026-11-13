@@ -155,6 +155,13 @@
       "when": 1794525566001,
       "tag": "0021_legal_ser_duncan",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794528213331,
+      "tag": "0022_known_the_hand",
+      "breakpoints": true
     }
   ]
 }

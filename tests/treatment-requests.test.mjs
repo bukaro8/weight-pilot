@@ -3,7 +3,7 @@ import test from "node:test";
 import {readFileSync} from "node:fs";
 import {registerHooks} from "node:module";
 import {canBrowseTreatments, canChangeRequestStatus} from "../src/features/treatments/policy.ts";
-import {createTreatmentRequestSchema, normaliseUkPostcode, treatmentDecisionSchema} from "../src/features/treatments/validation.ts";
+import {createTreatmentRequestSchema, normaliseUkPostcode, paymentAuthorisationSchema, treatmentDecisionSchema} from "../src/features/treatments/validation.ts";
 import {formatPenceWithPoundSymbol, treatmentCardHref, treatmentFromPath, treatmentItems} from "../src/features/treatments/presentation.ts";
 
 import {catalogueDosePriceRows, catalogueDoseStages} from "../src/features/treatments/dose-stages.ts";
@@ -15,7 +15,8 @@ registerHooks({resolve(specifier, context, nextResolve) {
   if (specifier === "@/features/email/notice") return nextResolve(new URL("../src/features/email/notice.ts", import.meta.url).href, context);
   return nextResolve(specifier, context);
 }});
-const {renderTreatmentApprovalEmail, renderTreatmentRequestNotification} = await import("../src/features/treatments/email-template.ts");
+const {renderTreatmentApprovalEmail, renderTreatmentPaymentEmail, renderTreatmentRequestNotification} = await import("../src/features/treatments/email-template.ts");
+const {calculatePaymentSnapshot, paymentEnvironmentConfigured} = await import("../src/features/treatments/payment.ts");
 
 test("catalogue requires verified active USER and an available report", () => {
   assert.equal(canBrowseTreatments(eligible, true), true);
@@ -137,56 +138,88 @@ test("notifications are bilingual, generic and contain only a secure request lin
   assert.match(route, /recipient: member\.email, target: "member", event: "created"/u);
 });
 
-test("approval emails are bilingual, include configured or fallback payment details and private messaging", () => {
+test("approval notices are bilingual and contain no payment request", () => {
   const en = renderTreatmentApprovalEmail({language: "en", memberName: "A. Member", treatment: "TIRZEPATIDE", strength: "12.5 mg", messagesUrl: "https://weightpilot.uk/en/messages"});
-  const es = renderTreatmentApprovalEmail({language: "es", memberName: "A. Member", treatment: "SEMAGLUTIDE", strength: "1.7 mg", messagesUrl: "https://weightpilot.uk/es/messages", accountName: "WeightPilot", accountNumber: "12345678", sortCode: "11 22 33"});
+  const es = renderTreatmentApprovalEmail({language: "es", memberName: "A. Member", treatment: "SEMAGLUTIDE", strength: "1.7 mg", messagesUrl: "https://weightpilot.uk/es/messages"});
   assert.match(en.html, /Your request has been approved for next steps/);
-  assert.match(en.html, /0000000/);
-  assert.match(en.html, /00 00 00/);
-  assert.match(en.html, /XXXX/);
-  assert.match(en.html, /12\.5 mg/);
-  assert.match(en.html, /https:\/\/weightpilot\.uk\/en\/messages/);
-  assert.match(en.html, /This email is not monitored/u);
   assert.match(es.html, /Tu solicitud se ha aprobado/);
-  assert.match(es.html, /11 22 33/);
-  assert.match(es.html, /12345678/);
-  assert.match(es.html, /https:\/\/weightpilot\.uk\/es\/messages/);
+  assert.match(en.html, /No payment is due/);
+  assert.match(es.html, /no requiere ningún pago/);
+  assert.doesNotMatch(en.html + es.html, /0000000|00 00 00|bank transfer|transferencia bancaria/i);
   assert.match(en.html, /not a prescription/i);
 });
 
-test("approval email uses the verified account recipient and a stable idempotency key without live delivery", async () => {
+test("payment uses exact approved strength price and freezes 480 pence delivery", () => {
+  const snapshot = calculatePaymentSnapshot({treatment: "TIRZEPATIDE", strength: "5 mg", pricePence: 7500});
+  assert.deepEqual(snapshot, {treatment: "TIRZEPATIDE", strength: "5 mg", itemPricePence: 7500, deliveryPricePence: 480, totalPence: 7980});
+  assert.throws(() => calculatePaymentSnapshot({treatment: "TIRZEPATIDE", strength: "12.5 mg", pricePence: null}), /STRENGTH_PRICE_MISSING/);
+  assert.equal(paymentEnvironmentConfigured({accountName: "XXXX", sortCode: "00 00 00", accountNumber: "0000000"}), false);
+  assert.equal(paymentEnvironmentConfigured({accountName: "Example Account", sortCode: "12 34 56", accountNumber: "12345678"}), true);
+});
+
+test("payment requires two explicit authorisation confirmations and references", () => {
+  const valid = {prescriptionReference: "RX-2026-123", supplyAuthorisationReference: "SUP-2026-123", prescribingVerified: true, supplyVerified: true};
+  assert.equal(paymentAuthorisationSchema.safeParse(valid).success, true);
+  assert.equal(paymentAuthorisationSchema.safeParse({...valid, supplyVerified: false}).success, false);
+  assert.equal(paymentAuthorisationSchema.safeParse({...valid, prescriptionReference: ""}).success, false);
+  assert.equal(paymentAuthorisationSchema.safeParse({...valid, role: "ADMIN"}).success, false);
+});
+
+test("authorised payment email is bilingual, priced, escaped, and links to private messaging", () => {
+  const base = {...calculatePaymentSnapshot({treatment: "TIRZEPATIDE", strength: "5 mg", pricePence: 7500}), memberName: "A. Member", messagesUrl: "https://weightpilot.uk/en/messages", imageUrl: "https://weightpilot.uk/treatments/tirzepatide.jpg", accountName: "Example Account", sortCode: "12 34 56", accountNumber: "12345678"};
+  const en = renderTreatmentPaymentEmail({...base, language: "en"});
+  const es = renderTreatmentPaymentEmail({...base, language: "es", memberName: "<script>"});
+  assert.match(en.html, /£75.00/);
+  assert.match(en.html, /£4.80/);
+  assert.match(en.html, /£79.80/);
+  assert.match(en.html, /Tirzepatide · 5 mg/);
+  assert.match(en.html, /tirzepatide.jpg/);
+  assert.match(en.html, /Royal Mail Tracked 24 aims/);
+  assert.match(es.html, /79,80/);
+  assert.match(es.html, /Tirzepatida/);
+  assert.doesNotMatch(es.html, /<script>/);
+  assert.match(es.html, /&lt;script&gt;/);
+});
+
+test("payment email uses a stable idempotency key and distinguishes acceptance, rejection and timeout", async () => {
   registerHooks({resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") return {url: "data:text/javascript,export%20default%20undefined", shortCircuit: true};
-    if (specifier === "resend") return {url: `data:text/javascript,${encodeURIComponent("export class Resend { constructor() { this.emails = {send: async (...args) => { globalThis.__treatmentMailCalls.push(args); return globalThis.__treatmentMailResult; }}; }}")}`, shortCircuit: true};
+    if (specifier === "resend") return {url: `data:text/javascript,${encodeURIComponent("export class Resend { constructor() { this.emails = {send: async (...args) => { globalThis.__paymentMailCalls.push(args); if (globalThis.__paymentMailOutcome === 'timeout') throw new Error('timeout'); return globalThis.__paymentMailOutcome; }}; }}")}`, shortCircuit: true};
     if (specifier === "./email-template") return nextResolve(new URL("../src/features/treatments/email-template.ts", import.meta.url).href, context);
     if (specifier.startsWith("@/")) return nextResolve(new URL(`../src/${specifier.slice(2)}.ts`, import.meta.url).href, context);
     return nextResolve(specifier, context);
   }});
-  const {sendTreatmentApprovalEmail, notifyTreatmentRequest} = await import("../src/features/treatments/email.ts");
-  const env = Object.fromEntries(["RESEND_API_KEY", "EMAIL_FROM", "PUBLIC_APP_URL", "ACCOUNT_NAME", "ACCOUNT_NUMBER", "SORT_CODE"].map((key) => [key, process.env[key]]));
-  Object.assign(process.env, {RESEND_API_KEY: "test-key", EMAIL_FROM: "sender@example.invalid", PUBLIC_APP_URL: "https://weightpilot.uk"});
-  globalThis.__treatmentMailCalls = [];
-  globalThis.__treatmentMailResult = {data: {id: "resend-message-id"}, error: null};
+  const {sendTreatmentPaymentEmail} = await import("../src/features/treatments/email.ts");
+  const names = ["RESEND_API_KEY", "EMAIL_FROM", "PUBLIC_APP_URL", "ACCOUNT_NAME", "SORT_CODE", "ACCOUNT_NUMBER"];
+  const env = Object.fromEntries(names.map((key) => [key, process.env[key]]));
+  Object.assign(process.env, {RESEND_API_KEY: "test-key", EMAIL_FROM: "sender@example.invalid", PUBLIC_APP_URL: "https://weightpilot.uk", ACCOUNT_NAME: "Example Account", SORT_CODE: "12 34 56", ACCOUNT_NUMBER: "12345678"});
+  globalThis.__paymentMailCalls = [];
+  const input = {id: "request-123", language: "en", recipient: "verified@example.invalid", memberName: "Member", snapshot: calculatePaymentSnapshot({treatment: "TIRZEPATIDE", strength: "5 mg", pricePence: 7500})};
   try {
-    const result = await sendTreatmentApprovalEmail({id: "request-123", language: "en", recipient: "verified@example.invalid", memberName: "Member", treatment: "SEMAGLUTIDE", strength: "1.7 mg"});
-    assert.deepEqual(result, {accepted: true, reason: null, providerMessageId: "resend-message-id"});
-    assert.equal(globalThis.__treatmentMailCalls[0][0].to, "verified@example.invalid");
-    assert.equal(globalThis.__treatmentMailCalls[0][1].idempotencyKey, "weightpilot-treatment-approval-request-123");
-    assert.match(globalThis.__treatmentMailCalls[0][0].html, /0000000/);
-    const receipt = await notifyTreatmentRequest({id: "request-123", language: "es", recipient: "verified@example.invalid", target: "member", event: "created"});
-    assert.equal(receipt.accepted, true);
-    assert.equal(globalThis.__treatmentMailCalls[1][0].to, "verified@example.invalid");
-    assert.equal(globalThis.__treatmentMailCalls[1][1].idempotencyKey, "treatment-request-request-123-member-created");
-    assert.match(globalThis.__treatmentMailCalls[1][0].html, /Hemos recibido tu solicitud/u);
-    assert.doesNotMatch(globalThis.__treatmentMailCalls[1][0].html, /0000000|00 00 00/u);
-    const route = readFileSync(new URL("../src/app/api/admin/treatment-requests/[id]/route.ts", import.meta.url), "utf8");
-    assert.match(route, /if \(!detail\.emailVerified\)/u);
-    assert.match(route, /recipient: detail\.memberEmail/u);
+    globalThis.__paymentMailOutcome = {data: {id: "resend-accepted"}, error: null};
+    assert.equal((await sendTreatmentPaymentEmail(input)).providerMessageId, "resend-accepted");
+    assert.equal(globalThis.__paymentMailCalls[0][0].to, input.recipient);
+    assert.equal(globalThis.__paymentMailCalls[0][1].idempotencyKey, "weightpilot-treatment-payment-request-123");
+    assert.match(globalThis.__paymentMailCalls[0][0].html, /£79.80/);
+    globalThis.__paymentMailOutcome = {data: null, error: {message: "rejected"}};
+    assert.equal((await sendTreatmentPaymentEmail(input)).reason, "REJECTED");
+    globalThis.__paymentMailOutcome = "timeout";
+    assert.equal((await sendTreatmentPaymentEmail(input)).reason, "UNCERTAIN");
   } finally {
     for (const [key, value] of Object.entries(env)) {if (value === undefined) delete process.env[key]; else process.env[key] = value;}
-    delete globalThis.__treatmentMailCalls;
-    delete globalThis.__treatmentMailResult;
+    delete globalThis.__paymentMailCalls; delete globalThis.__paymentMailOutcome;
   }
+});
+
+test("payment route requires verified authorisation and cannot send on approval alone", () => {
+  const route = readFileSync(new URL("../src/app/api/admin/treatment-requests/[id]/payment/route.ts", import.meta.url), "utf8");
+  const server = readFileSync(new URL("../src/features/treatments/server.ts", import.meta.url), "utf8");
+  const approvalRoute = readFileSync(new URL("../src/app/api/admin/treatment-requests/[id]/route.ts", import.meta.url), "utf8");
+  assert.match(route, /paymentAuthorisationSchema/);
+  assert.match(route, /claimTreatmentPaymentInstruction/);
+  assert.match(server, /treatmentStrengthPrice\.strength, request\.approvedStrength/);
+  assert.match(server, /treatmentPaymentInstruction/);
+  assert.doesNotMatch(approvalRoute, /sendTreatmentPaymentEmail/);
 });
 
 test("report treatment CTA eligibility requires a clear treatment suggestion", () => {
