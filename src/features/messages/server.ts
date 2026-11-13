@@ -6,6 +6,7 @@ import {messageConversation, privateMessage, user} from "@/db/schema";
 import {canAccessAdmin, canAccessPrivateServices} from "@/features/auth/policy";
 import {publicInvitationOrigin} from "@/features/invitations/sharing";
 import {sendPrivateMessageNotification} from "@/features/messages/email";
+import {supportWelcomeClientMessageId, supportWelcomeMessage} from "@/features/messages/support-welcome";
 import type {AdminConversationSummary, MessageItem} from "@/features/messages/types";
 import type {PrivateMessageInput} from "@/features/messages/validation";
 
@@ -118,12 +119,53 @@ async function notifyRecipient(messageId: string, recipient: string, recipientNa
   await sendPrivateMessageNotification({messageId, recipient, recipientName, language, url});
 }
 
+async function sendFirstSupportWelcome(memberId: string, conversationId: string) {
+  const db = getDb();
+  const [conversation] = await db.select({supportWelcomeSentAt: messageConversation.supportWelcomeSentAt})
+    .from(messageConversation).where(and(eq(messageConversation.id, conversationId), eq(messageConversation.memberId, memberId))).limit(1);
+  if (!conversation || conversation.supportWelcomeSentAt) return;
+
+  const clientMessageId = supportWelcomeClientMessageId(conversationId);
+  const [existing] = await db.select({createdAt: privateMessage.createdAt}).from(privateMessage)
+    .where(and(eq(privateMessage.conversationId, conversationId), eq(privateMessage.clientMessageId, clientMessageId))).limit(1);
+  if (existing) {
+    await db.update(messageConversation).set({supportWelcomeSentAt: existing.createdAt})
+      .where(and(eq(messageConversation.id, conversationId), isNull(messageConversation.supportWelcomeSentAt)));
+    return;
+  }
+
+  const [[admin], [member]] = await Promise.all([
+    db.select({id: user.id, role: user.role, status: user.status, emailVerified: user.emailVerified})
+      .from(user).where(and(eq(user.role, "ADMIN"), eq(user.status, "ACTIVE"), eq(user.emailVerified, true))).limit(1),
+    db.select({preferredLanguage: user.preferredLanguage, status: user.status, emailVerified: user.emailVerified})
+      .from(user).where(eq(user.id, memberId)).limit(1),
+  ]);
+  if (!admin || !member || member.status !== "ACTIVE" || !member.emailVerified) return;
+
+  const result = await sendAdminMessage(admin, conversationId, {
+    clientMessageId,
+    body: supportWelcomeMessage(member.preferredLanguage),
+  });
+  await db.update(messageConversation).set({supportWelcomeSentAt: new Date(result.message.createdAt)})
+    .where(and(eq(messageConversation.id, conversationId), isNull(messageConversation.supportWelcomeSentAt)));
+}
+
 export async function sendMemberMessage(actor: MessageActor, input: PrivateMessageInput) {
   const result = await sendMessage(actor, null, input);
-  if (result.created) {
-    const [admin] = await getDb().select({id: user.id, email: user.email, name: user.name, language: user.preferredLanguage})
-      .from(user).where(and(eq(user.role, "ADMIN"), eq(user.status, "ACTIVE"), eq(user.emailVerified, true))).limit(1);
-    if (admin) await notifyRecipient(result.record.id, admin.email, admin.name, admin.language, `/${admin.language}/admin/messages/${result.conversationId}`);
+  try {
+    if (result.created) {
+      const [admin] = await getDb().select({id: user.id, email: user.email, name: user.name, language: user.preferredLanguage})
+        .from(user).where(and(eq(user.role, "ADMIN"), eq(user.status, "ACTIVE"), eq(user.emailVerified, true))).limit(1);
+      if (admin) await notifyRecipient(result.record.id, admin.email, admin.name, admin.language, `/${admin.language}/admin/messages/${result.conversationId}`);
+    }
+  } catch {
+    // The member's message is already committed; notification is best-effort.
+  }
+  try {
+    await sendFirstSupportWelcome(actor.id, result.conversationId);
+  } catch {
+    // A failed automatic reply must never turn a saved member message into an error.
+    // The stable client ID and conversation marker make a later attempt safe.
   }
   return {conversationId: result.conversationId, message: mapMessage(result.record, actor.id), created: result.created};
 }

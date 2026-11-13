@@ -490,6 +490,7 @@ export const messageConversation = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     memberId: uuid("member_id").notNull().unique().references(() => user.id, {onDelete: "cascade"}),
+    supportWelcomeSentAt: timestamp("support_welcome_sent_at", {withTimezone: true}),
     createdAt: timestamp("created_at", {withTimezone: true}).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", {withTimezone: true}).notNull().defaultNow(),
   },

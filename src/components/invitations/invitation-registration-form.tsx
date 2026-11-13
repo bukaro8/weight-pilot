@@ -1,6 +1,6 @@
 "use client";
 
-import {ArrowRight, CheckCircle2, LoaderCircle} from "lucide-react";
+import {ArrowRight, CheckCircle2, LoaderCircle, Mail} from "lucide-react";
 import {useLocale, useTranslations} from "next-intl";
 import {useState, type FormEvent} from "react";
 
@@ -55,6 +55,10 @@ export function InvitationRegistrationForm({initialCode = ""}: {initialCode?: st
       <CheckCircle2 className="mx-auto text-primary" aria-hidden="true" size={32}/>
       <h2 className="mt-4 font-display text-2xl font-semibold text-primary-dark">{t("registrationCompleteTitle")}</h2>
       <p className="mt-2 text-sm leading-6 text-muted">{t("registrationCompleteBody")}</p>
+      <div className="mt-5 flex items-start gap-3 rounded-xl border border-accent-strong/30 bg-pale-blush px-4 py-4 text-left text-primary-dark">
+        <Mail className="mt-0.5 shrink-0" aria-hidden="true" size={21}/>
+        <p className="text-sm leading-6">{t("registrationSpamNotice")}</p>
+      </div>
       <Link href="/verify-email/pending" className="mt-5 inline-flex min-h-11 items-center font-semibold text-primary underline-offset-4 hover:underline">{t("verificationPendingLink")}</Link>
     </div>
   );

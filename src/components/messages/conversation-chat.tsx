@@ -101,7 +101,7 @@ export function ConversationChat({locale, apiPath, readPath, initialMessages, in
           {!loading && messages.length === 0 ? <div className="flex min-h-56 flex-col items-center justify-center px-4 text-center"><span className="flex size-14 items-center justify-center rounded-2xl bg-pale-blush text-primary"><MessageCircle aria-hidden="true" size={23}/></span><h2 className="mt-4 font-display text-xl font-semibold text-primary-dark">{t("emptyTitle")}</h2><p className="mt-2 max-w-sm text-sm leading-6 text-muted">{t("emptyBody")}</p></div> : null}
           {messages.map((message) => <article key={message.id} className={`flex ${message.isMine ? "justify-end" : "justify-start"}`}>
             <div className={`max-w-[88%] min-w-0 rounded-2xl px-3.5 py-3 shadow-sm sm:max-w-[78%] sm:px-4 ${message.isMine ? "rounded-br-md bg-primary text-white" : "rounded-bl-md border border-primary/8 bg-white text-text"}`}>
-              {recipient && !message.isMine ? <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-primary/70">{t("memberLabel")}</p> : null}
+              {!message.isMine ? <p className="mb-1 text-[11px] font-bold uppercase tracking-wide text-primary/70">{recipient ? t("memberLabel") : t("supportLabel")}</p> : null}
               <p className="whitespace-pre-wrap break-words text-sm leading-6">{message.body}</p>
               <p className={`mt-2 flex items-center justify-end gap-1 text-[11px] ${message.isMine ? "text-white/75" : "text-muted"}`}><time dateTime={message.createdAt}>{date(message.createdAt)}</time>{message.isMine && message.readAt ? <Check aria-label={t("read")} size={13}/> : null}</p>
             </div>

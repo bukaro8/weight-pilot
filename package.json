@@ -16,7 +16,7 @@
     "test:assessment-results": "node --no-warnings --experimental-strip-types --test tests/assessment-results.test.mjs",
     "test:assessment-decision": "node --no-warnings --experimental-strip-types --test tests/assessment-decision.test.mjs",
     "test:invitation-sharing": "node --no-warnings --experimental-strip-types --test tests/invitation-sharing.test.mjs",
-    "test:messages": "node --no-warnings --experimental-strip-types --test tests/messages.test.mjs",
+    "test:messages": "node --no-warnings --experimental-strip-types --test tests/messages.test.mjs tests/message-welcome-db.test.mjs",
     "test:treatments": "node --no-warnings --experimental-strip-types --test tests/treatment-requests.test.mjs",
     "test:notifications": "node --no-warnings --experimental-strip-types --test tests/notification-badges.test.mjs",
     "test:release": "node --no-warnings --experimental-strip-types --test tests/release-preparation.test.mjs",

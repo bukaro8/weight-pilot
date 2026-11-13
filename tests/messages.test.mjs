@@ -4,6 +4,7 @@ import test from "node:test";
 import {registerHooks} from "node:module";
 
 import {privateMessageSchema} from "../src/features/messages/validation.ts";
+import {supportWelcomeClientMessageId, supportWelcomeMessage} from "../src/features/messages/support-welcome.ts";
 
 registerHooks({resolve(specifier, context, nextResolve) {
   if (specifier === "@/features/email/notice") return nextResolve(new URL("../src/features/email/notice.ts", import.meta.url).href, context);
@@ -56,6 +57,31 @@ test("message notification greeting has a natural fallback without a usable name
   assert.match(es.text, /^Hola:\n/u);
 });
 
+test("first-contact support copy is bilingual and has a stable message identifier", () => {
+  const conversationId = "660c510e-c4e7-4927-8abb-e2aebf906257";
+  const messageId = supportWelcomeClientMessageId(conversationId);
+  assert.equal(privateMessageSchema.safeParse({body: supportWelcomeMessage("en"), clientMessageId: messageId}).success, true);
+  assert.equal(messageId, supportWelcomeClientMessageId(conversationId));
+  assert.notEqual(messageId, supportWelcomeClientMessageId("c70663ce-76a6-4d96-8c85-ae62443c58b6"));
+  assert.match(supportWelcomeMessage("en"), /Spam or Junk Email folder/u);
+  assert.match(supportWelcomeMessage("es"), /Spam o Correo no deseado/u);
+});
+
+test("registration and chat display bilingual deliverability and support labels", async () => {
+  const [en, es, form, chat] = await Promise.all([
+    readFile(new URL("../src/messages/en.json", import.meta.url), "utf8").then(JSON.parse),
+    readFile(new URL("../src/messages/es.json", import.meta.url), "utf8").then(JSON.parse),
+    readFile(new URL("../src/components/invitations/invitation-registration-form.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../src/components/messages/conversation-chat.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(en.auth.registrationSpamNotice, /inbox and Spam or Junk Email/u);
+  assert.match(es.auth.registrationSpamNotice, /bandeja de entrada.*Spam o Correo no deseado/u);
+  assert.match(form, /t\("registrationSpamNotice"\)/u);
+  assert.equal(en.messages.supportLabel, "WeightPilot Support");
+  assert.equal(es.messages.supportLabel, "Soporte de WeightPilot");
+  assert.match(chat, /t\("supportLabel"\)/u);
+});
+
 test("message APIs independently enforce member ownership and administrator role", async () => {
   const files = [
     "../src/app/api/messages/route.ts",
@@ -87,8 +113,18 @@ test("message sends are rate limited and Resend retries use a stable idempotency
   assert.match(server, /if \(result\.created\)/u);
   assert.match(server, /name: user\.name/u);
   assert.match(server, /recipientName/u);
+  assert.match(server, /sendFirstSupportWelcome\(actor\.id, result\.conversationId\)/u);
+  assert.match(server, /sendAdminMessage\(admin, conversationId/u);
   assert.match(schema, /memberId: uuid\("member_id"\)\.notNull\(\)\.unique\(\)/u);
   assert.match(schema, /clientMessageId: uuid\("client_message_id"\)\.notNull\(\)\.unique\(\)/u);
   assert.match(migration, /ON DELETE cascade/u);
   assert.match(migration, /char_length\(trim\("private_message"\."body"\)\) between 1 and 4000/u);
+});
+
+test("welcome migration preserves older conversations without creating replies", async () => {
+  const migration = await readFile(new URL("../drizzle/0024_support_welcome.sql", import.meta.url), "utf8");
+  assert.match(migration, /ADD COLUMN "support_welcome_sent_at"/u);
+  assert.match(migration, /WHERE EXISTS \(/u);
+  assert.match(migration, /message\."sender_id" = conversation\."member_id"/u);
+  assert.doesNotMatch(migration, /INSERT INTO "private_message"/u);
 });

@@ -169,6 +169,13 @@
       "when": 1794530397315,
       "tag": "0023_white_yellowjacket",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794590686490,
+      "tag": "0024_support_welcome",
+      "breakpoints": true
     }
   ]
 }
